@@ -12,7 +12,6 @@ const CONFIG = {
       url: 'https://ssrn-summarizer-backend-v1-7-0-pisqy7uvxq-uc.a.run.app',
       name: 'Cloud Run',
       priority: 1,
-      
       enabled: true
     }
   },
