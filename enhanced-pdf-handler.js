@@ -489,7 +489,7 @@ async function analyzePDFWithImprovedHandling(tab, paperId) {
     
     // Step 3: Get user settings
     const settings = await chrome.storage.local.get(['llmSettings', 'userSettings']);
-    const llmSettings = settings.llmSettings || { model: 'gemini-2.5-flash' };
+    const llmSettings = settings.llmSettings || { model: 'gemini-3-flash-preview' };
     const userSettings = settings.userSettings || {};
     
     // Step 4: Check backend availability

@@ -367,7 +367,7 @@ function saveSettings() {
       
       // Get selected model
       const selectedModelCard = document.querySelector('.model-card.selected');
-      const selectedModel = selectedModelCard ? selectedModelCard.dataset.model : 'gemini-2.5-pro';
+      const selectedModel = selectedModelCard ? selectedModelCard.dataset.model : 'gemini-3-flash-preview';
       
       // Get research profile
       const googleScholarUrl = document.getElementById('googleScholarUrl').value.trim();
@@ -446,7 +446,7 @@ function skipSetup() {
   const defaultSettings = {
     essenceScholarApiKey: '', // Add API key field
     llmSettings: {
-      model: 'gemini-2.5-pro'
+      model: 'gemini-3-flash-preview'
       // Old API key fields removed - no longer needed
     },
     userSettings: {

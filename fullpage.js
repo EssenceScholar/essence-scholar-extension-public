@@ -1576,7 +1576,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       console.log('Loading model settings...');
       const result = await chrome.storage.local.get(['llmSettings']);
-      const settings = result.llmSettings || { model: 'gemini-2.5-flash' };
+      const settings = result.llmSettings || { model: 'gemini-3-flash-preview' };
       console.log('Model settings found:', settings);
       
       // Set the selected model
@@ -2359,10 +2359,10 @@ document.addEventListener('DOMContentLoaded', function() {
           
           while (retryCount < maxRetries) {
             settings = await chrome.storage.local.get(['userSettings', 'llmSettings']);
-            llmSettings = settings.llmSettings || { model: 'gemini-2.5-flash' };
+            llmSettings = settings.llmSettings || { model: 'gemini-3-flash-preview' };
             
             // No API key validation needed - backend handles all LLM API keys
-            const selectedModel = llmSettings.model || 'gemini-2.5-flash';
+            const selectedModel = llmSettings.model || 'gemini-3-flash-preview';
             
             console.log(`🔍 Fullpage: Retry ${retryCount + 1}/${maxRetries} - Model: ${selectedModel}`);
             
@@ -2372,7 +2372,7 @@ document.addEventListener('DOMContentLoaded', function() {
           
           const researchInterests = settings.userSettings?.researchInterests || '';
           const userScholarUrl = settings.userSettings?.googleScholarUrl || '';
-          const selectedModel = llmSettings.model || 'gemini-2.5-flash';
+          const selectedModel = llmSettings.model || 'gemini-3-flash-preview';
           
           // Debug logging to see what's loaded from storage
           console.log('🔍 Fullpage: LLM Settings loaded from storage:', {
@@ -2724,7 +2724,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const storageResult = await chrome.storage.local.get(['llmSettings']);
       console.log("🔍 Chat: Raw storage result:", storageResult);
       
-      const llmSettings = storageResult.llmSettings || { model: 'gemini-2.5-flash' };
+      const llmSettings = storageResult.llmSettings || { model: 'gemini-3-flash-preview' };
       console.log("🔍 Chat: LLM settings loaded:", {
         model: llmSettings.model,
         lastUpdated: llmSettings.lastUpdated || 'unknown'
@@ -3377,8 +3377,11 @@ document.addEventListener('DOMContentLoaded', function() {
           <button class="analysis-option" data-model="" style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 3px; background: ${!currentModel ? '#007bff' : '#fff'}; color: ${!currentModel ? '#fff' : '#000'}; cursor: pointer;">
             Latest Analysis
           </button>
-          <button class="analysis-option" data-model="gemini-2.5-flash" style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 3px; background: ${currentModel === 'gemini-2.5-flash' ? '#007bff' : '#fff'}; color: ${currentModel === 'gemini-2.5-flash' ? '#fff' : '#000'}; cursor: pointer;">
-            Gemini 2.5 Flash
+          <button class="analysis-option" data-model="gemini-3-flash-preview" style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 3px; background: ${currentModel === 'gemini-3-flash-preview' ? '#007bff' : '#fff'}; color: ${currentModel === 'gemini-3-flash-preview' ? '#fff' : '#000'}; cursor: pointer;">
+            Gemini 3 Flash
+          </button>
+          <button class="analysis-option" data-model="gemini-2.0-flash" style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 3px; background: ${currentModel === 'gemini-2.0-flash' ? '#007bff' : '#fff'}; color: ${currentModel === 'gemini-2.0-flash' ? '#fff' : '#000'}; cursor: pointer;">
+            Gemini 2.0 Flash
           </button>
           <button class="analysis-option" data-model="gpt-4" style="padding: 5px 10px; border: 1px solid #ccc; border-radius: 3px; background: ${currentModel === 'gpt-4' ? '#007bff' : '#fff'}; color: ${currentModel === 'gpt-4' ? '#fff' : '#000'}; cursor: pointer;">
             GPT-4
@@ -3443,7 +3446,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Default to fastest model
-    return 'gemini-2.5-flash';
+    return 'gemini-3-flash-preview';
   }
 
   // --- Static title setup (no animation) ---
@@ -5034,7 +5037,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const researchInterests = userSettings.userSettings?.researchInterests || '';
           
           // Get current LLM settings
-          const llmSettings = (await chrome.storage.local.get(['llmSettings'])).llmSettings || { model: 'gemini-2.5-flash' };
+          const llmSettings = (await chrome.storage.local.get(['llmSettings'])).llmSettings || { model: 'gemini-3-flash-preview' };
           
           // Check each researcher type for existing analysis
           for (const researcher of juniorResearchers) {
@@ -5163,7 +5166,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const userSettings = await chrome.storage.local.get(['userSettings', 'llmSettings']);
       const scholarUrl = userSettings.userSettings?.googleScholarUrl || 'https://scholar.google.de/citations?user=jgW3WbcAAAAJ&hl=en';
       const researchInterests = userSettings.userSettings?.researchInterests || '';
-      const llmSettings = userSettings.llmSettings || { model: 'gemini-2.5-flash' };
+      const llmSettings = userSettings.llmSettings || { model: 'gemini-3-flash-preview' };
       
       console.log(`🔄 REFRESH DEBUG - User settings loaded:`, {
         scholarUrl: scholarUrl.substring(0, 50) + '...',
@@ -5187,7 +5190,7 @@ document.addEventListener('DOMContentLoaded', function() {
         paper_id: paperId,
         user_scholar_url: scholarUrl,
         researcher_type: researcherType,
-        model: llmSettings.model || 'gemini-2.5-flash',
+        model: llmSettings.model || 'gemini-3-flash-preview',
         research_interests: researchInterests
       };
       
@@ -5318,7 +5321,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const researchInterests = userSettings.userSettings?.researchInterests || '';
       
       // Get current LLM settings
-      const llmSettings = (await chrome.storage.local.get(['llmSettings'])).llmSettings || { model: 'gemini-2.5-flash', geminiKey: '', openaiKey: '', claudeKey: '' };
+      const llmSettings = (await chrome.storage.local.get(['llmSettings'])).llmSettings || { model: 'gemini-3-flash-preview', geminiKey: '', openaiKey: '', claudeKey: '' };
       
       // Get backend
       const backend = await BackendManager.getCurrentBackend();
@@ -5498,7 +5501,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Get user settings for analysis generation
       const userSettings = await chrome.storage.local.get(['userSettings', 'llmSettings']);
       const researchInterests = userSettings.userSettings?.researchInterests || '';
-      const llmSettings = userSettings.llmSettings || { model: 'gemini-2.5-flash', geminiKey: '', openaiKey: '', claudeKey: '' };
+      const llmSettings = userSettings.llmSettings || { model: 'gemini-3-flash-preview', geminiKey: '', openaiKey: '', claudeKey: '' };
       
       // Get backend
       const backend = await BackendManager.getCurrentBackend();
@@ -5519,7 +5522,7 @@ document.addEventListener('DOMContentLoaded', function() {
         paper_id: paperId,
         user_scholar_url: scholarUrl,
         research_interests: researchInterests,
-        model: llmSettings.model || 'gemini-2.5-flash',
+        model: llmSettings.model || 'gemini-3-flash-preview',
         researcher_type: researcherType,
         paper_title: paperStorageData.title,
         paper_abstract: paperStorageData.metadata?.abstract || '',
@@ -5534,7 +5537,7 @@ document.addEventListener('DOMContentLoaded', function() {
         user_scholar_url: scholarUrl,
         researcher_type: researcherType,
         research_interests: researchInterests,
-        model: llmSettings.model || 'gemini-2.5-flash'
+        model: llmSettings.model || 'gemini-3-flash-preview'
       };
       
       // No API keys needed - backend handles all LLM API keys
@@ -5660,7 +5663,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Get LLM settings for chat
       const storageResult = await chrome.storage.local.get(['llmSettings']);
-      const llmSettings = storageResult.llmSettings || { model: 'gemini-2.5-flash', geminiKey: '', openaiKey: '', claudeKey: '' };
+      const llmSettings = storageResult.llmSettings || { model: 'gemini-3-flash-preview', geminiKey: '', openaiKey: '', claudeKey: '' };
       
       console.log('🔍 New Chat: LLM settings loaded:', {
         model: llmSettings.model,

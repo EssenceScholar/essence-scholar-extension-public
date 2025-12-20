@@ -535,7 +535,7 @@ async function handlePDFAnalysis(request, sender, sendResponse) {
     
     // Get settings
     const settings = await chrome.storage.local.get(['llmSettings', 'userSettings']);
-    const llmSettings = settings.llmSettings || { model: 'gemini-2.5-flash' };
+    const llmSettings = settings.llmSettings || { model: 'gemini-3-flash-preview' };
     const userSettings = settings.userSettings || {};
     
     // Get backend

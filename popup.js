@@ -968,7 +968,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     try {
       const result = await chrome.storage.local.get(['llmSettings']);
-      const settings = result.llmSettings || { model: 'gemini-2.5-flash' };
+      const settings = result.llmSettings || { model: 'gemini-3-flash-preview' };
       
       // No API key validation needed - backend handles all LLM API keys
       configStatusDiv.style.display = 'none';
@@ -1272,13 +1272,13 @@ document.addEventListener('DOMContentLoaded', function() {
     settingsBtn.addEventListener('click', () => {
       // Load settings from storage
       chrome.storage.local.get(['llmSettings'], (result) => {
-        const settings = result.llmSettings || { model: 'gemini-2.5-flash' };
+        const settings = result.llmSettings || { model: 'gemini-3-flash-preview' };
         
         console.log('🔍 Popup: Loading LLM settings from storage:', {
           model: settings.model
         });
         
-        modelSelect.value = settings.model || 'gemini-2.5-flash';
+        modelSelect.value = settings.model || 'gemini-3-flash-preview';
         settingsModal.style.display = 'flex';
       });
     });
@@ -1848,10 +1848,10 @@ If the issue persists, this may be a compatibility issue with the current SSRN p
 
             // Get current settings
             const settings = await chrome.storage.local.get(['llmSettings', 'userSettings']);
-            const selectedModel = settings.llmSettings?.model || 'gemini-2.5-flash';
+            const selectedModel = settings.llmSettings?.model || 'gemini-3-flash-preview';
             const userScholarUrl = settings.userSettings?.googleScholarUrl || 'https://scholar.google.de/citations?user=jgW3WbcAAAAJ&hl=en';
             const researchInterests = settings.userSettings?.researchInterests || '';
-            const llmSettings = settings.llmSettings || { model: 'gemini-2.5-flash' };
+            const llmSettings = settings.llmSettings || { model: 'gemini-3-flash-preview' };
 
             // Step 4: Check if this is a local file or web URL
             let fileContentB64 = null;

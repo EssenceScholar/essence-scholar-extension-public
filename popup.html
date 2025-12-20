@@ -263,9 +263,15 @@
       <div style="margin-bottom:18px;">
         <label for="model-select" style="font-weight:500;">LLM Model:</label>
         <select id="model-select" style="margin-left:10px; padding:4px 8px; border-radius:4px;">
-          <optgroup label="Gemini">
-            <option value="gemini-2.5-flash" title="Optimized for speed with good accuracy. Best for quick analysis.">Gemini 2.5 Flash (Fastest)</option>
-            <option value="gemini-2.5-pro" title="Best balance of speed and accuracy. Recommended for most use cases.">Gemini 2.5 Pro (Most Reliable)</option>
+          <optgroup label="Gemini 3 (Preview)">
+            <option value="gemini-3-flash-preview" title="Optimized for speed with good accuracy. Best for quick analysis.">Gemini 3 Flash (Fastest)</option>
+            <option value="gemini-3-pro-preview" title="Superior reasoning and multimodal capabilities.">Gemini 3 Pro (Advanced)</option>
+            <option value="gemini-3-deep-think-preview" title="Specialized for complex reasoning.">Gemini 3 Deep Think</option>
+          </optgroup>
+          <optgroup label="Gemini Legacy">
+            <option value="gemini-2.0-flash" title="Next generation, optimized for speed.">Gemini 2.0 Flash</option>
+            <option value="gemini-1.5-pro" title="Best balance of speed and accuracy. Recommended for most use cases.">Gemini 1.5 Pro (Most Reliable)</option>
+            <option value="gemini-2.0-pro-exp" title="Experimental 2.0 Pro model.">Gemini 2.0 Pro (Exp)</option>
           </optgroup>
           <optgroup label="OpenAI">
             <option value="gpt-4" title="Most thoroughly tested GPT-4 model. Very reliable.">GPT-4 (Most Reliable)</option>
