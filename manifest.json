@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Essence Scholar",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Uncover the essence of every study! AI-powered insights tailored to your academic interests in economics & social sciences.",
   "permissions": [
     "activeTab",
