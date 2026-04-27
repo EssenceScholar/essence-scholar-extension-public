@@ -1432,13 +1432,16 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   if (request.action === 'checkPDFStatus') {
     const tabId = request.tabId || sender.tab?.id;
     const pdfInfo = pdfDetectionState.get(tabId);
-    
+    const tabState = activeTabs.get(tabId);
+
     if (pdfInfo) {
       sendResponse({
         isPDF: true,
         url: pdfInfo.url,
         contentType: pdfInfo.contentType,
-        method: 'background-cache'
+        method: 'background-cache',
+        pdfReady: tabState?.pdfReady || false,
+        paperId: tabState?.paperId || null
       });
     } else {
       sendResponse({ isPDF: false });
@@ -1513,21 +1516,21 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   
   // Handle messages from PDF collector (legacy support)
   if (request.status === 'ready' && request.pdf) {
-    console.log('[BG] PDF collector reported ready:', request.pdf);
-    
-    // Store PDF info for popup access
+    console.log('[BG] PDF collector reported ready:', request.pdf, 'paperId:', request.paperId);
+
     if (sender.tab) {
       const tabState = activeTabs.get(sender.tab.id) || {};
       tabState.pdfReady = true;
       tabState.pdfInfo = request.pdf;
+      tabState.paperId = request.paperId || null;
       tabState.lastUpdated = Date.now();
       activeTabs.set(sender.tab.id, tabState);
-      
-      // Forward to popup if it's listening
+
       try {
         chrome.runtime.sendMessage({
           action: 'pdfReady',
           tabId: sender.tab.id,
+          paperId: request.paperId || null,
           pdf: request.pdf
         });
       } catch (e) {

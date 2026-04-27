@@ -4,492 +4,77 @@
   <meta charset="UTF-8">
   <title>Essence Scholar</title>
   <link rel="stylesheet" href="styles.css">
-  <style>
-    .container {
-      width: 380px;
-      padding: 16px;
-      text-align: center;
-      box-sizing: border-box;
-    }
-
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .header-right {
-      display: flex;
-      gap: 4px;
-    }
-
-    .small-btn {
-      width: 32px;
-      height: 32px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    }
-
-    .home-btn {
-      background-color: #4CAF50;
-      color: white;
-    }
-
-    .home-btn:hover {
-      background-color: #45a049;
-      transform: translateY(-1px);
-    }
-
-    .settings-btn {
-      background-color: #6c757d;
-      color: white;
-    }
-
-    .settings-btn:hover {
-      background-color: #5a6268;
-      transform: translateY(-1px);
-    }
-
-    .progress-indicator {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid #f3f3f3;
-      border-top: 2px solid #FF9800;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-right: 8px;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .step-indicator {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 8px 0;
-      font-size: 12px;
-      color: #666;
-    }
-    .step-indicator .step {
-      display: flex;
-      align-items: center;
-      margin: 0 5px;
-    }
-    .step-indicator .step.completed {
-      color: #4CAF50;
-    }
-    .step-indicator .step.current {
-      color: #FF9800;
-      font-weight: bold;
-    }
-    .step-indicator .step.pending {
-      color: #ccc;
-    }
-    .step-indicator .step-icon {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      margin-right: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-    }
-    .step-indicator .step.completed .step-icon {
-      background-color: #4CAF50;
-      color: white;
-    }
-    .step-indicator .step.current .step-icon {
-      background-color: #FF9800;
-      color: white;
-    }
-    .step-indicator .step.pending .step-icon {
-      background-color: #ccc;
-      color: white;
-    }
-    
-    /* Backend loading styles */
-    .backend-loading {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      color: #666;
-    }
-    
-    .backend-loading .spinner {
-      width: 24px;
-      height: 24px;
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #2196F3;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 12px;
-    }
-    
-    .backend-loading .loading-text {
-      font-size: 14px;
-      text-align: center;
-    }
-    
-    /* Credit display styles */
-    .credit-display {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 8px 12px;
-      border-radius: 8px;
-      margin: 8px 0;
-      text-align: center;
-      font-size: 13px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      cursor: pointer;
-    }
-    
-    .credit-display .credit-label {
-      font-weight: 500;
-      margin-bottom: 2px;
-    }
-    
-    .credit-display .credit-amount {
-      font-size: 16px;
-      font-weight: bold;
-      color: #FFD700;
-    }
-    
-    .credit-display .credit-info {
-      font-size: 11px;
-      opacity: 0.9;
-      margin-top: 2px;
-    }
-
-    /* Modal tab styles */
-    .modal-tabs {
-      display: flex;
-      border-bottom: 2px solid #e0e0e0;
-      margin: -4px -4px 16px -4px;
-    }
-    .modal-tab {
-      flex: 1;
-      padding: 8px 12px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      color: #888;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -2px;
-      transition: color 0.2s, border-color 0.2s;
-    }
-    .modal-tab.active {
-      color: #4CAF50;
-      border-bottom-color: #4CAF50;
-    }
-    .modal-tab:hover:not(.active) {
-      color: #555;
-    }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-
-    /* Account / Dashboard tab styles */
-    .account-section {
-      margin-bottom: 16px;
-    }
-    .account-section-title {
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #888;
-      margin-bottom: 8px;
-    }
-    .user-info-card {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-radius: 8px;
-      padding: 12px 14px;
-      font-size: 13px;
-    }
-    .user-info-card .user-name {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-    .user-info-card .user-email {
-      opacity: 0.85;
-      font-size: 12px;
-    }
-    .credits-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #f8f9fa;
-      border-radius: 8px;
-      padding: 10px 14px;
-      margin-bottom: 6px;
-    }
-    .credits-row .credits-label { font-size: 13px; color: #555; }
-    .credits-row .credits-value { font-size: 18px; font-weight: bold; }
-    .credits-buy-link {
-      font-size: 11px;
-      color: #667eea;
-      text-decoration: none;
-      display: block;
-      text-align: right;
-      margin-top: 2px;
-    }
-    .credits-buy-link:hover { text-decoration: underline; }
-    .api-key-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #f8f9fa;
-      border-radius: 6px;
-      padding: 7px 10px;
-      margin-bottom: 5px;
-      font-size: 12px;
-    }
-    .api-key-item .key-info { flex: 1; }
-    .api-key-item .key-masked {
-      font-family: monospace;
-      color: #333;
-      font-size: 11px;
-    }
-    .api-key-item .key-date {
-      color: #999;
-      font-size: 10px;
-      margin-top: 1px;
-    }
-    .key-revoke-btn {
-      background: none;
-      border: 1px solid #F44336;
-      color: #F44336;
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 11px;
-      cursor: pointer;
-      white-space: nowrap;
-      margin-left: 6px;
-    }
-    .key-revoke-btn:hover { background: #F44336; color: white; }
-    .create-key-btn {
-      width: 100%;
-      padding: 7px;
-      background: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      cursor: pointer;
-      margin-top: 4px;
-    }
-    .create-key-btn:hover { background: #45a049; }
-    .new-key-box {
-      background: #e8f5e9;
-      border: 1px solid #4CAF50;
-      border-radius: 6px;
-      padding: 10px;
-      margin-top: 8px;
-      font-size: 12px;
-    }
-    .new-key-box .new-key-label {
-      font-weight: 600;
-      color: #2e7d32;
-      margin-bottom: 4px;
-    }
-    .new-key-box .new-key-value {
-      font-family: monospace;
-      word-break: break-all;
-      color: #1b5e20;
-      background: white;
-      border-radius: 4px;
-      padding: 4px 6px;
-      display: block;
-      margin-bottom: 4px;
-      cursor: pointer;
-      border: 1px solid #a5d6a7;
-    }
-    .new-key-box .new-key-warning {
-      font-size: 10px;
-      color: #e65100;
-    }
-    .usage-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 5px 0;
-      border-bottom: 1px solid #f0f0f0;
-      font-size: 12px;
-    }
-    .usage-item:last-child { border-bottom: none; }
-    .usage-feature {
-      color: #333;
-      font-weight: 500;
-      text-transform: capitalize;
-    }
-    .usage-meta { text-align: right; color: #888; font-size: 11px; }
-    .usage-units { color: #764ba2; font-weight: 600; }
-    .account-loading {
-      text-align: center;
-      padding: 20px;
-      color: #888;
-      font-size: 13px;
-    }
-    .account-error {
-      text-align: center;
-      padding: 12px;
-      color: #F44336;
-      font-size: 12px;
-      background: #fff3f3;
-      border-radius: 6px;
-    }
-    .modal-content {
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-  </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="header-left">
-        <img src="icons/icon48.png" alt="Icon" class="icon">
-        <h1>Essence Scholar</h1>
-      </div>
-      <div class="header-right">
-        <button id="home-btn" class="small-btn home-btn" title="Home">🏠</button>
-        <button id="onboarding-btn" class="small-btn settings-btn" title="Setup Guide">📋</button>
-        <button id="settings-btn" class="small-btn settings-btn" title="Settings">⚙️</button>
-      </div>
-    </div>
-    
-    <!-- Backend Status Display -->
-    <div id="backend-status" class="backend-status">
-      <div class="info">🔍 Detecting backend...</div>
-    </div>
-    
-    <!-- Credit Display -->
-    <div id="credit-display" class="credit-display" style="display: none;">
-      <div class="credit-label">Available Credits</div>
-      <div class="credit-amount" id="credit-amount">--</div>
-      <div class="credit-info">
-        Add to your credit via <a href="https://essensescholar.com/dashboard" target="_blank" rel="noopener noreferrer">essensescholar.com/dashboard</a>
-      </div>
-    </div>
-    
-    <!-- Configuration Status Display -->
-    <div id="config-status" class="config-status" style="margin-top: 8px;">
-      <div class="warning">⚠️ Please configure your LLM model and API key in Settings</div>
-    </div>
-    
-    <div id="status-container" class="status-container">
-      <div id="loading-indicator" class="loading-indicator" style="display: none;">
-        <div class="spinner"></div>
-        <div class="progress-text">Initializing...</div>
-      </div>
-      
-      <div id="progress-container" class="progress-container" style="display: none;">
-        <div class="progress-bar">
-          <div class="progress-fill"></div>
-        </div>
-        <div class="progress-steps">
-          <div class="step">Extract</div>
-          <div class="step">Analyze</div>
-          <div class="step">Complete</div>
-        </div>
-      </div>
 
-      <div id="error-container" class="error-container" style="display: none;">
-        <div class="error-icon">❌</div>
-        <div class="error-content">
-          <div class="error-title"></div>
-          <div class="error-message"></div>
-          <div class="error-action"></div>
-        </div>
-      </div>
+  <div class="header">
+    <div class="header-brand">
+      <img src="icons/icon48.png" alt="" class="icon">
+      <h1>Essence Scholar</h1>
     </div>
-
-    <div class="button-container">
-      <button id="analyze-btn" class="analyze-btn" style="display: none;">
-        <span class="button-icon" style="display: none;">⏳</span>
-        <span class="button-text">Analyze Current Paper</span>
-      </button>
-      
-      <button id="analyze-authors-btn" class="analyze-authors-btn" style="display: none;">
-        <span class="button-icon" style="display: none;">⏳</span>
-        <span class="button-text">Analyze Authors</span>
-      </button>
-      
-      <!-- Loading state while waiting for backend -->
-      <div id="backend-loading" class="backend-loading" style="display: block;">
-        <div class="spinner"></div>
-        <div class="loading-text">Connecting to backend...</div>
-      </div>
-    </div>
+    <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
   </div>
 
-  <div id="settings-modal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:1000; align-items:center; justify-content:center;">
-    <div class="modal-content" style="background:white; padding:24px; border-radius:10px; min-width:300px; max-width:90vw; margin:auto; box-shadow:0 2px 8px rgba(0,0,0,0.2);">
-      <h2 style="margin-top:0;">Settings</h2>
-      <div style="margin-bottom:18px;">
-        <label for="model-select" style="font-weight:500;">LLM Model:</label>
-        <select id="model-select" style="margin-left:10px; padding:4px 8px; border-radius:4px;">
-          <optgroup label="Gemini 3 (Preview)">
-            <option value="gemini-3-flash-preview" title="Optimized for speed with good accuracy. Best for quick analysis.">Gemini 3 Flash (Fastest)</option>
-            <option value="gemini-3-pro-preview" title="Superior reasoning and multimodal capabilities.">Gemini 3 Pro (Advanced)</option>
-            <option value="gemini-3-deep-think-preview" title="Specialized for complex reasoning.">Gemini 3 Deep Think</option>
-          </optgroup>
-          <optgroup label="Gemini Legacy">
-            <option value="gemini-2.0-flash" title="Next generation, optimized for speed.">Gemini 2.0 Flash</option>
-            <option value="gemini-1.5-pro" title="Best balance of speed and accuracy. Recommended for most use cases.">Gemini 1.5 Pro (Most Reliable)</option>
-            <option value="gemini-2.0-pro-exp" title="Experimental 2.0 Pro model.">Gemini 2.0 Pro (Exp)</option>
-          </optgroup>
-          <optgroup label="OpenAI">
-            <option value="gpt-4" title="Most thoroughly tested GPT-4 model. Very reliable.">GPT-4 (Most Reliable)</option>
-            <option value="gpt-4o-mini" title="Fast and efficient GPT-4 variant. Good balance of speed and capability.">GPT-4o Mini (Fastest)</option>
-          </optgroup>
-          <optgroup label="Claude">
-            <option value="claude-opus-4-0" title="Latest and most powerful Claude model. Best for complex analysis.">Claude Opus 4 (Most Capable)</option>
-            <option value="claude-sonnet-4-0" title="Latest Claude Sonnet with enhanced capabilities.">Claude Sonnet 4 (Latest)</option>
-            <option value="claude-3-7-sonnet-latest" title="Enhanced Claude 3.7 Sonnet with improved reasoning.">Claude 3.7 Sonnet (Enhanced)</option>
-            <option value="claude-3-5-sonnet-latest" title="Great balance of performance and speed.">Claude 3.5 Sonnet (Balanced)</option>
-            <option value="claude-3-5-haiku-latest" title="Fast and efficient Claude model. Good for quick responses.">Claude 3.5 Haiku (Fastest)</option>
-          </optgroup>
-        </select>
-      </div>
-      <div style="font-size:0.9em; color:#666; margin-bottom:18px; padding:12px; background:#f5f5f5; border-radius:6px;">
-        <strong>ℹ️ Note:</strong> LLM API keys are now managed by the backend. You only need to provide your Essence Scholar API key during onboarding.
-      </div>
-      <div style="text-align:right;">
-        <button id="settings-cancel-btn" style="margin-right:10px; padding:6px 16px; border-radius:4px; border:none; background:#ccc; color:#333;">Cancel</button>
-        <button id="settings-save-btn" style="padding:6px 16px; border-radius:4px; border:none; background:#4CAF50; color:white;">Save</button>
-      </div>
-    </div>
+  <!-- ── State: Not connected ───────────────────────── -->
+  <div id="state-connect" class="content state">
+    <div class="state-icon yellow">🔑</div>
+    <div class="state-title">Connect Your Account</div>
+    <div class="state-subtitle">Enter your API key to start importing PDFs into your library</div>
+    <label class="form-label" for="api-key-input">Essence Scholar API Key</label>
+    <input type="password" id="api-key-input" class="form-input" placeholder="sk_live_...">
+    <button id="connect-btn" class="btn-primary" disabled>Connect Account</button>
+    <p class="hint">
+      No account yet? <a href="https://essencescholar.com" target="_blank">Sign up free →</a>
+    </p>
+  </div>
+
+  <!-- ── State: PDF detected ────────────────────────── -->
+  <div id="state-pdf" class="content state">
+    <div class="state-icon blue">📄</div>
+    <div class="state-title">Academic PDF Detected</div>
+    <div id="pdf-filename" class="state-subtitle"></div>
+    <button id="import-btn" class="btn-primary">Import to Essence Scholar</button>
+    <button id="open-app-from-pdf" class="btn-secondary">Open Essence Scholar ↗</button>
+  </div>
+
+  <!-- ── State: Importing ───────────────────────────── -->
+  <div id="state-importing" class="content state">
+    <div class="spinner-wrap"><div class="spinner"></div></div>
+    <div class="state-title">Importing PDF…</div>
+    <div class="state-subtitle">Uploading to your Essence Scholar library</div>
+  </div>
+
+  <!-- ── State: Imported successfully ──────────────── -->
+  <div id="state-done" class="content state">
+    <div class="state-icon green">✓</div>
+    <div class="state-title">Imported Successfully!</div>
+    <div class="state-subtitle">The paper has been added to your library</div>
+    <button id="view-btn" class="btn-primary">View in Essence Scholar ↗</button>
+  </div>
+
+  <!-- ── State: Not a PDF ───────────────────────────── -->
+  <div id="state-no-pdf" class="content state">
+    <div class="state-icon muted">🔍</div>
+    <div class="state-title">No PDF on This Page</div>
+    <div class="state-subtitle">Navigate to an academic PDF and click this icon to import it into your library</div>
+    <button id="open-app-no-pdf" class="btn-secondary">Open Essence Scholar ↗</button>
+  </div>
+
+  <!-- ── State: Error ───────────────────────────────── -->
+  <div id="state-error" class="content state">
+    <div class="state-icon yellow">⚠️</div>
+    <div class="state-title">Import Failed</div>
+    <div id="error-message" class="state-subtitle"></div>
+    <button id="retry-btn" class="btn-primary">Try Again</button>
+    <button id="open-app-error" class="btn-secondary">Open Essence Scholar ↗</button>
+  </div>
+
+  <div class="popup-footer">
+    <a href="https://essencescholar.com" target="_blank">essencescholar.com</a>
   </div>
 
   <script src="config.js"></script>
   <script src="shared-id-generator.js"></script>
-  <script src="enhanced-pdf-handler.js"></script>
   <script src="popup.js"></script>
-
-  <div id="popup-footer" style="position:fixed; right:10px; bottom:8px; z-index:9999; font-size:11px; color:#888; background:rgba(255,255,255,0.85); padding:2px 8px; border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,0.04); pointer-events:none;">
-    Developed by <a href="https://www.sasanm.de" target="_blank" style="color:#888; text-decoration:underline; pointer-events:auto;">Sasan Mansouri</a>
-  </div>
 </body>
 </html>

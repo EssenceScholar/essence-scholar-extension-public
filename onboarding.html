@@ -2,772 +2,269 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Welcome to Essence Scholar - Setup</title>
-  <link rel="stylesheet" href="styles.css">
+  <title>Essence Scholar — Setup</title>
   <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
     body {
-      width: 100%;
       margin: 0;
-      padding: 12px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 0;
       min-height: 100vh;
-    }
-    
-    .onboarding-container {
-      width: 100%;
-      max-width: 800px;
-      margin: 0 auto;
-      background-color: white;
-      padding: 40px;
-      border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-    }
-    
-    .onboarding-header {
-      text-align: center;
-      margin-bottom: 40px;
-    }
-    
-    .onboarding-title {
-      font-size: 48px;
-      font-weight: 700;
-      color: #2c3e50;
-      margin-bottom: 16px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    
-    .onboarding-subtitle {
-      font-size: 20px;
-      color: #6c757d;
-      margin-bottom: 20px;
-      font-weight: 400;
-    }
-    
-    .onboarding-description {
-      font-size: 16px;
-      color: #6c757d;
-      line-height: 1.6;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    
-    .setup-steps {
-      margin-top: 40px;
-    }
-    
-    .step {
-      margin-bottom: 40px;
-      padding: 30px;
-      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-      border-radius: 16px;
-      border: 1px solid #dee2e6;
-      transition: all 0.3s ease;
-    }
-    
-    .step:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-    }
-    
-    .step-header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-    
-    .step-number {
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-radius: 50%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8fafc;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 700;
-      font-size: 18px;
-      margin-right: 16px;
+      color: #1e293b;
     }
-    
-    .step-title {
-      font-size: 24px;
-      font-weight: 600;
-      color: #2c3e50;
-      margin: 0;
-    }
-    
-    .step-description {
-      font-size: 16px;
-      color: #6c757d;
-      margin-bottom: 25px;
-      line-height: 1.5;
-    }
-    
-    .form-group {
-      margin-bottom: 20px;
-    }
-    
-    .form-label {
-      display: block;
-      font-size: 16px;
-      font-weight: 600;
-      color: #2c3e50;
-      margin-bottom: 8px;
-    }
-    
-    .form-input {
-      width: 100%;
-      padding: 16px 20px;
-      border: 2px solid #dee2e6;
-      border-radius: 12px;
-      font-size: 16px;
-      transition: all 0.3s ease;
+
+    .card {
       background: white;
-      box-sizing: border-box;
-    }
-    
-    .form-input:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
-    .form-textarea {
-      min-height: 120px;
-      resize: vertical;
-    }
-    
-    .model-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 16px;
-      margin-top: 20px;
-    }
-    
-    .model-card {
-      background: white;
-      border: 2px solid #e9ecef;
-      border-radius: 12px;
-      padding: 20px;
-      text-align: center;
-      transition: all 0.3s ease;
-      cursor: pointer;
-      position: relative;
-    }
-    
-    .model-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
-      border-color: #667eea;
-    }
-    
-    .model-card.selected {
-      border-color: #667eea;
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2);
-    }
-    
-    .model-icon {
-      font-size: 32px;
-      margin-bottom: 12px;
-      display: block;
-    }
-    
-    .model-name {
-      font-size: 16px;
-      font-weight: 600;
-      color: #2c3e50;
-      margin-bottom: 8px;
-    }
-    
-    .model-description {
-      font-size: 14px;
-      color: #6c757d;
-      line-height: 1.4;
-    }
-    
-    .feature-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      justify-content: center;
-      margin-top: 12px;
-    }
-    
-    .feature-tag {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 4px 10px;
       border-radius: 16px;
-      font-size: 11px;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 440px;
+      margin: 24px;
     }
-    
-    .model-card.selected .feature-tag {
-      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    }
-    
-    .api-key-info {
-      background: #e3f2fd;
-      border: 1px solid #bbdefb;
-      border-radius: 8px;
-      padding: 16px;
-      margin-top: 12px;
-    }
-    
-    .api-key-info h4 {
-      margin: 0 0 8px 0;
-      color: #1976d2;
-      font-size: 14px;
-    }
-    
-    .api-key-info p {
-      margin: 0;
-      color: #424242;
-      font-size: 13px;
-      line-height: 1.4;
-    }
-    
-    .api-key-info a {
-      color: #1976d2;
-      text-decoration: none;
-      font-weight: 500;
-    }
-    
-    .api-key-info a:hover {
-      text-decoration: underline;
-    }
-    
-    .test-api-key-btn {
-      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-      color: white;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 12px;
-      transition: all 0.2s ease;
-    }
-    
-    .test-api-key-btn:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
-    }
-    
-    .api-key-status {
-      margin-top: 16px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-    }
-    
-    .api-key-status.success {
-      background: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
-    }
-    
-    .api-key-status.error {
-      background: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
-    }
-    
-    .junior-researchers-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-      margin-top: 20px;
-    }
-    
-    .researcher-checkbox {
+
+    /* Header */
+    .logo-row {
       display: flex;
       align-items: center;
       gap: 10px;
-      cursor: pointer;
-      padding: 12px 16px;
-      border: 1px solid #dee2e6;
-      border-radius: 12px;
-      transition: all 0.2s ease;
-      background-color: white;
+      margin-bottom: 32px;
     }
-    
-    .researcher-checkbox:hover {
-      border-color: #667eea;
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-    }
-    
-    .researcher-checkbox input {
-      position: absolute;
-      opacity: 0;
-      cursor: pointer;
-      height: 0;
-      width: 0;
-    }
-    
-    .checkmark {
-      height: 20px;
-      width: 20px;
-      background-color: #f0f0f0;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      transition: all 0.2s ease;
-    }
-    
-    .researcher-checkbox:hover input ~ .checkmark {
-      background-color: #e0e0e0;
-    }
-    
-    .researcher-checkbox input:checked ~ .checkmark {
-      background-color: #667eea;
-      border: none;
-    }
-    
-    .checkmark:after {
-      content: "";
-      position: absolute;
-      display: none;
-    }
-    
-    .researcher-checkbox input:checked ~ .checkmark:after {
-      display: block;
-    }
-    
-    .researcher-checkbox .checkmark:after {
-      left: 6px;
-      top: 2px;
-      width: 5px;
-      height: 10px;
-      border: solid white;
-      border-width: 0 3px 3px 0;
-      transform: rotate(45deg);
-    }
-    
-    .researcher-info {
-      flex-grow: 1;
-    }
-    
-    .researcher-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: #2c3e50;
-      margin-bottom: 4px;
-    }
-    
-    .researcher-description {
-      font-size: 12px;
-      color: #6c757d;
-      line-height: 1.4;
-    }
-    
-    .setup-actions {
-      text-align: center;
-      margin-top: 40px;
-      padding-top: 30px;
-      border-top: 2px solid #e9ecef;
-    }
-    
-    .setup-btn {
-      padding: 16px 32px;
-      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-      color: white;
-      border: none;
-      border-radius: 12px;
+    .logo-row img { width: 36px; height: 36px; }
+    .logo-row .brand {
       font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      margin: 0 10px;
+      font-weight: 700;
+      color: #1e293b;
+      letter-spacing: -0.02em;
     }
-    
-    .setup-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
     }
-    
-    .setup-btn:disabled {
-      background: #6c757d;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-    
-    .generate-profile-btn {
-      margin-top: 12px;
-      padding: 12px 20px;
-      background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
-      color: white;
-      border: none;
-      border-radius: 8px;
+    .subtitle {
       font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      width: 100%;
+      color: #64748b;
+      margin: 0 0 32px;
+      line-height: 1.5;
+    }
+
+    /* Feature list */
+    .features {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .features li {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 8px;
+      gap: 10px;
+      font-size: 14px;
+      color: #475569;
     }
-    
-    .generate-profile-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
+    .features li .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+      flex-shrink: 0;
     }
-    
-    .generate-profile-btn:disabled {
-      background: #6c757d;
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: #e2e8f0;
+      margin: 0 0 28px;
+    }
+
+    /* Form */
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      color: #1e293b;
+      background: #f8fafc;
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+      margin-bottom: 8px;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(14,165,233,0.1);
+    }
+    .form-input::placeholder { color: #94a3b8; }
+
+    .field-hint {
+      font-size: 12px;
+      color: #94a3b8;
+      margin: 0 0 24px;
+      line-height: 1.5;
+    }
+    .field-hint a { color: #0ea5e9; text-decoration: none; }
+    .field-hint a:hover { text-decoration: underline; }
+
+    /* Buttons */
+    .btn-primary {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0ea5e9 0%, #8b5cf6 100%);
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: -0.01em;
+    }
+    .btn-primary:hover  { opacity: 0.9; }
+    .btn-primary:active { transform: scale(0.99); }
+    .btn-primary:disabled {
+      opacity: 0.45;
       cursor: not-allowed;
       transform: none;
-      box-shadow: none;
     }
-    
-    .skip-btn {
-      background: #6c757d;
+
+    /* Status messages */
+    .status-msg {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-top: 14px;
+      display: none;
     }
-    
-    .skip-btn:hover {
-      background: #5a6268;
+    .status-msg.success { background: #d1fae5; color: #065f46; display: block; }
+    .status-msg.error   { background: #fee2e2; color: #991b1b; display: block; }
+    .status-msg.loading {
+      background: #dbeafe;
+      color: #1e40af;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    
-    .loading {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #667eea;
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #93c5fd;
+      border-top-color: #1d4ed8;
       border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-right: 8px;
+      animation: spin 0.75s linear infinite;
+      flex-shrink: 0;
     }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Existing key notice */
+    .existing-key {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: 13px;
     }
-    
-    .progress-bar {
-      width: 100%;
-      height: 6px;
-      background: #e9ecef;
-      border-radius: 3px;
-      margin-bottom: 30px;
-      overflow: hidden;
+    .existing-key .key-label { color: #64748b; }
+    .existing-key .key-masked { font-family: monospace; color: #1e293b; font-size: 12px; }
+    .existing-key .key-remove {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 2px;
+      line-height: 1;
     }
-    
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 3px;
-      transition: width 0.3s ease;
-      width: 0%;
-    }
-    
-    @media (max-width: 768px) {
-      .onboarding-container {
-        padding: 20px;
-        margin: 0 8px;
-      }
-      
-      .onboarding-title {
-        font-size: 36px;
-      }
-      
-      .onboarding-subtitle {
-        font-size: 18px;
-      }
-      
-      .step {
-        padding: 20px;
-      }
-      
-      .model-grid {
-        grid-template-columns: 1fr;
-      }
-      
-      .junior-researchers-grid {
-        grid-template-columns: 1fr;
-      }
+    .existing-key .key-remove:hover { color: #ef4444; }
+
+    .footer-note {
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: center;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <div class="onboarding-container">
-    <div class="onboarding-header">
-      <h1 class="onboarding-title">Welcome to Essence Scholar!</h1>
-      <p class="onboarding-subtitle">Let's get you set up in just a few steps</p>
-      <p class="onboarding-description">
-        Essence Scholar uses AI to analyze academic papers and provide personalized insights. 
-        Complete this quick setup to start getting the most out of your research.
-      </p>
+  <div class="card">
+    <div class="logo-row">
+      <img src="icons/icon128.png" alt="">
+      <span class="brand">Essence Scholar</span>
     </div>
-    
-    <div class="progress-bar">
-      <div class="progress-fill" id="progressFill"></div>
+
+    <h1>Connect your account</h1>
+    <p class="subtitle">Import any academic PDF directly into your research library with one click.</p>
+
+    <ul class="features">
+      <li><span class="dot"></span>Detect PDFs automatically as you browse</li>
+      <li><span class="dot"></span>One-click import into your library</li>
+      <li><span class="dot"></span>AI-powered analysis on the platform</li>
+    </ul>
+
+    <div class="divider"></div>
+
+    <!-- Existing key notice (shown if already configured) -->
+    <div id="existing-key-row" class="existing-key" style="display:none;">
+      <div>
+        <div class="key-label">Connected account</div>
+        <div class="key-masked" id="existing-key-masked"></div>
+      </div>
+      <button class="key-remove" id="remove-key-btn" title="Remove key">✕</button>
     </div>
-    
-    <div class="setup-steps">
-      <!-- Step 1: API Key Setup -->
-      <div class="step" id="step1">
-        <div class="step-header">
-          <div class="step-number">1</div>
-          <h2 class="step-title">Essence Scholar API Key</h2>
-        </div>
-        <p class="step-description">
-          Get your API key from Essence Scholar to start using the extension. Free tier includes 1,000 credits!
-        </p>
-        
-        <div class="form-group">
-          <label for="essenceApiKey" class="form-label">Essence Scholar API Key</label>
-          <input type="password" id="essenceApiKey" class="form-input" placeholder="sk_live_xxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
-          <div class="api-key-info">
-            <h4>💡 How to get your API key:</h4>
-            <p>1. Visit <a href="https://essence-scholar.com" target="_blank">Essence Scholar</a><br>
-            2. Sign up or log in to your account<br>
-            3. Go to your dashboard to get your API key<br>
-            4. Copy and paste it here</p>
-            <p><strong>Free tier includes 1,000 credits to get started!</strong></p>
-          </div>
-          <button type="button" id="testApiKeyBtn" class="test-api-key-btn" style="display: none;">
-            <span id="testBtnText">🔑 Test API Key</span>
-            <span id="testBtnLoading" class="loading" style="display: none;"></span>
-          </button>
-        </div>
-        
-        <div id="apiKeyStatus" class="api-key-status" style="display: none;"></div>
-      </div>
-      
-      <!-- Step 2: Model Selection -->
-      <div class="step" id="step2" style="display: none;">
-        <div class="step-header">
-          <div class="step-number">2</div>
-          <h2 class="step-title">Choose Your AI Model</h2>
-        </div>
-        <p class="step-description">
-          Select your preferred AI model for paper analysis. Don't worry about API keys - our backend handles all the technical details!
-        </p>
-        
-        <div class="model-grid">
-          <!-- Gemini 3 Models -->
-          <div class="model-card selected" data-model="gemini-3-flash-preview">
-            <div class="model-icon">⚡</div>
-            <h3 class="model-name">Gemini 3 Flash</h3>
-            <p class="model-description">Latest flash model. Fastest analysis.</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Fastest</span>
-              <span class="feature-tag">Default</span>
-            </div>
-          </div>
-          <div class="model-card" data-model="gemini-3-pro-preview">
-            <div class="model-icon">🤖</div>
-            <h3 class="model-name">Gemini 3 Pro</h3>
-            <p class="model-description">Advanced reasoning capabilities.</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Advanced</span>
-            </div>
-          </div>
-          
-          <div class="model-card" data-model="gemini-2.0-flash">
-            <div class="model-icon">⚡</div>
-            <h3 class="model-name">Gemini 2.0 Flash</h3>
-            <p class="model-description">Next generation flash model.</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Fast</span>
-            </div>
-          </div>
-          
-          <div class="model-card" data-model="gemini-1.5-pro">
-            <div class="model-icon">🤖</div>
-            <h3 class="model-name">Gemini 1.5 Pro</h3>
-            <p class="model-description">Stable pro model.</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Stable</span>
-            </div>
-          </div>
-          
-          <!-- OpenAI Models -->
-          <div class="model-card" data-model="gpt-4">
-            <div class="model-icon">🧠</div>
-            <h3 class="model-name">GPT-4</h3>
-            <p class="model-description">Most thoroughly tested model</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Premium</span>
-              <span class="feature-tag">Reliable</span>
-            </div>
-          </div>
-          
-          <div class="model-card" data-model="gpt-4o-mini">
-            <div class="model-icon">🚀</div>
-            <h3 class="model-name">GPT-4o Mini</h3>
-            <p class="model-description">Fast and efficient GPT-4 variant</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Fast</span>
-              <span class="feature-tag">Premium</span>
-            </div>
-          </div>
-          
-          <!-- Claude Models -->
-          <div class="model-card" data-model="claude-3-5-sonnet-latest">
-            <div class="model-icon">🎯</div>
-            <h3 class="model-name">Claude 3.5 Sonnet</h3>
-            <p class="model-description">Great balance of performance and speed</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Balanced</span>
-              <span class="feature-tag">Premium</span>
-            </div>
-          </div>
-          
-          <div class="model-card" data-model="claude-3-5-haiku-latest">
-            <div class="model-icon">⚡</div>
-            <h3 class="model-name">Claude 3.5 Haiku</h3>
-            <p class="model-description">Fast and efficient Claude model</p>
-            <div class="feature-tags">
-              <span class="feature-tag">Fastest</span>
-              <span class="feature-tag">Premium</span>
-            </div>
-          </div>
-        </div>
-        
-        <div style="background: #e3f2fd; border-radius: 12px; padding: 20px; margin-top: 20px; border-left: 4px solid #1976d2;">
-          <h4 style="color: #1976d2; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-            <span>💡</span> How it works:
-          </h4>
-          <p style="margin: 0; color: #1976d2; font-size: 14px; line-height: 1.5;">
-            Choose your preferred model above. Our backend will automatically use the best available model from your selection, 
-            handling all API keys and technical details behind the scenes. You just focus on your research!
-          </p>
-        </div>
-      </div>
-      
-      <!-- Step 3: Research Profile -->
-      <div class="step" id="step3" style="display: none;">
-        <div class="step-header">
-          <div class="step-number">3</div>
-          <h2 class="step-title">Your Research Profile</h2>
-        </div>
-        <p class="step-description">
-          Help us provide more relevant analysis by sharing your research interests and profile.
-        </p>
-        
-        <div class="form-group">
-          <label for="googleScholarUrl" class="form-label">Google Scholar Profile URL</label>
-          <input type="url" id="googleScholarUrl" class="form-input" placeholder="https://scholar.google.de/citations?user=...">
-          <button type="button" id="generateProfileBtn" class="generate-profile-btn">
-            <span id="generateBtnText">🔍 Generate Research Profile</span>
-            <span id="generateBtnLoading" class="loading" style="display: none;"></span>
-          </button>
-          <p style="font-size: 14px; color: #6c757d; margin-top: 8px;">
-            This helps us understand your research background and provide more personalized insights.
-          </p>
-        </div>
-        
-        <div class="form-group">
-          <label for="researchInterests" class="form-label">Research Interests</label>
-          <textarea id="researchInterests" class="form-input form-textarea" placeholder="Describe your research interests, areas of expertise, and current projects. For example: 'I study behavioral economics, particularly decision-making under uncertainty and experimental methods.'"></textarea>
-          <p style="font-size: 14px; color: #6c757d; margin-top: 8px;">
-            This information helps us tailor paper analysis to your specific research needs.
-          </p>
-        </div>
-      </div>
-      
-      <!-- Step 4: Analysis Preferences -->
-      <div class="step" id="step4" style="display: none;">
-        <div class="step-header">
-          <div class="step-number">4</div>
-          <h2 class="step-title">Analysis Preferences</h2>
-        </div>
-        <p class="step-description">
-          Choose which aspects of papers you'd like us to analyze. You can change these later.
-        </p>
-        
-        <div class="junior-researchers-grid">
-          <label class="researcher-checkbox">
-                            <input type="checkbox" name="junior_researchers" value="key_message">
-            <span class="checkmark"></span>
-            <div class="researcher-info">
-              <div class="researcher-name">Key Message Analyst</div>
-              <div class="researcher-description">Extracts core findings and contributions</div>
-            </div>
-          </label>
-          
-          <label class="researcher-checkbox">
-                            <input type="checkbox" name="junior_researchers" value="author_profiles">
-            <span class="checkmark"></span>
-            <div class="researcher-info">
-              <div class="researcher-name">Author Profile Researcher</div>
-              <div class="researcher-description">Analyzes author credentials and backgrounds</div>
-            </div>
-          </label>
-          
-          <label class="researcher-checkbox">
-                            <input type="checkbox" name="junior_researchers" value="contributions_novelty">
-            <span class="checkmark"></span>
-            <div class="researcher-info">
-              <div class="researcher-name">Novelty & Contributions Analyst</div>
-              <div class="researcher-description">Evaluates claimed contributions and novelty</div>
-            </div>
-          </label>
-          
-          <label class="researcher-checkbox">
-                            <input type="checkbox" name="junior_researchers" value="data_variables_models">
-            <span class="checkmark"></span>
-            <div class="researcher-info">
-              <div class="researcher-name">Data & Methods Specialist</div>
-              <div class="researcher-description">Analyzes data sources and econometric models</div>
-            </div>
-          </label>
-          
-          <label class="researcher-checkbox">
-                            <input type="checkbox" name="junior_researchers" value="identification_causality">
-            <span class="checkmark"></span>
-            <div class="researcher-info">
-              <div class="researcher-name">Causal Inference Expert</div>
-              <div class="researcher-description">Examines identification strategies</div>
-            </div>
-          </label>
-          
-          <label class="researcher-checkbox">
-                            <input type="checkbox" name="junior_researchers" value="quick_takeaways">
-            <span class="checkmark"></span>
-            <div class="researcher-info">
-              <div class="researcher-name">Relevance Assessor</div>
-              <div class="researcher-description">Provides quick takeaways and relevance</div>
-            </div>
-          </label>
-          
-          <label class="researcher-checkbox">
-                            <input type="checkbox" name="junior_researchers" value="bibliography_reference">
-            <span class="checkmark"></span>
-            <div class="researcher-info">
-              <div class="researcher-name">Bibliography Analyst</div>
-              <div class="researcher-description">Analyzes reference patterns and citations</div>
-            </div>
-          </label>
-        </div>
-      </div>
-    </div>
-    
-    <div class="setup-actions">
-      <button id="prevBtn" class="setup-btn skip-btn" style="display: none;">Previous</button>
-      <button id="nextBtn" class="setup-btn">Next</button>
-      <button id="finishBtn" class="setup-btn" style="display: none;">
-        <span id="finishBtnText">Finish Setup</span>
-        <span id="finishBtnLoading" class="loading" style="display: none;"></span>
-      </button>
-      <button id="skipBtn" class="setup-btn skip-btn">Skip Setup</button>
-    </div>
+
+    <label class="form-label" for="api-key-input">Essence Scholar API Key</label>
+    <input
+      type="password"
+      id="api-key-input"
+      class="form-input"
+      placeholder="sk_live_xxxx_..."
+      autocomplete="off"
+    >
+    <p class="field-hint">
+      Get your API key from your
+      <a href="https://essencescholar.com/app" target="_blank">Essence Scholar dashboard</a>.
+      Don't have an account?
+      <a href="https://essencescholar.com" target="_blank">Sign up free →</a>
+    </p>
+
+    <button id="save-btn" class="btn-primary" disabled>Connect Account</button>
+
+    <div id="status-msg" class="status-msg"></div>
+
+    <p class="footer-note">
+      Your API key is stored locally and never shared.
+    </p>
   </div>
-  
+
   <script src="config.js"></script>
   <script src="onboarding.js"></script>
 </body>
-</html> 
+</html>

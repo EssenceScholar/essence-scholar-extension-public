@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Essence Scholar",
   "version": "1.8.0",
-  "description": "Uncover the essence of every study! AI-powered insights tailored to your academic interests in economics & social sciences.",
+  "description": "Import academic PDFs into your Essence Scholar library with one click. Automatically detects PDFs as you browse.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -41,12 +41,6 @@
         "pdf.min.js",
         "pdf.worker.min.js",
         "pdf-init.js",
-        "fullpage.html",
-        "fullpage.js",
-        "onboarding.html",
-        "onboarding.js",
-        "marked.min.js",
-        "marked-init.js",
         "shared-id-generator.js"
       ],
       "matches": ["<all_urls>"]
