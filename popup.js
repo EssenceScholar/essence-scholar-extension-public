@@ -1,21 +1,24 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const WEB_APP = 'https://essencescholar.com';
-  const IMPORT_TIMEOUT_MS = 30000;
+  const IMPORT_TIMEOUT_MS = 60000;
   let currentPaperId = null;
 
   // ── State machine ──────────────────────────────────────────────
   const stateEls = {
-    connect:   document.getElementById('state-connect'),
-    pdf:       document.getElementById('state-pdf'),
-    importing: document.getElementById('state-importing'),
-    done:      document.getElementById('state-done'),
-    noPdf:     document.getElementById('state-no-pdf'),
-    error:     document.getElementById('state-error'),
+    connect:    document.getElementById('state-connect'),
+    pdf:        document.getElementById('state-pdf'),
+    importable: document.getElementById('state-importable'),
+    importing:  document.getElementById('state-importing'),
+    done:       document.getElementById('state-done'),
+    noPdf:      document.getElementById('state-no-pdf'),
+    error:      document.getElementById('state-error'),
   };
 
   function show(name) {
-    Object.values(stateEls).forEach(el => el.classList.remove('active'));
-    stateEls[name].classList.add('active');
+    Object.values(stateEls).forEach(el => {
+      if (el) el.classList.remove('active');
+    });
+    if (stateEls[name]) stateEls[name].classList.add('active');
   }
 
   // ── Auth helpers ───────────────────────────────────────────────
@@ -26,14 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return b.essence_scholar_api_key || null;
   }
 
-  // ── PDF detection ──────────────────────────────────────────────
-  function looksLikePdf(url) {
-    if (!url) return false;
-    const lower = url.toLowerCase();
-    return lower.endsWith('.pdf') || lower.includes('/pdf/') ||
-           lower.includes('application%2Fpdf') || lower.includes('content-type=pdf');
-  }
-
+  // ── Helpers ───────────────────────────────────────────────────
   async function getPdfStatus(tabId) {
     try {
       return await chrome.runtime.sendMessage({ action: 'checkPDFStatus', tabId });
@@ -42,7 +38,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function displayName(url) {
+  function openApp() {
+    console.log('Opening Essence Scholar app. currentPaperId:', currentPaperId);
+    
+    // Ensure we don't have double slashes if WEB_APP has one
+    const baseUrl = WEB_APP.endsWith('/') ? WEB_APP.slice(0, -1) : WEB_APP;
+    let url = `${baseUrl}/app/`;
+    
+    if (currentPaperId) {
+      url = `${baseUrl}/app/?paperID=${encodeURIComponent(currentPaperId)}`;
+    }
+    
+    console.log('Redirecting to:', url);
+    chrome.tabs.create({ url });
+  }
+
+  // ── Detection Helpers ──────────────────────────────────────────
+  async function checkTabStatus(tab) {
+    // 1. Check background status (header-based)
+    const bgStatus = await getPdfStatus(tab.id);
+    if (bgStatus.isPDF) return { type: 'pdf', status: bgStatus };
+
+    // 2. Check via Enhanced PDF Handler (content-based)
+    try {
+      if (window.PDFHandler) {
+        const enhancedStatus = await window.PDFHandler.checkIfPDFPage(tab);
+        if (enhancedStatus.isPDF) return { type: 'pdf', status: enhancedStatus };
+      }
+    } catch (e) {
+      console.warn('Enhanced PDF check failed:', e);
+    }
+
+    // 3. Check for Importable Content
+    try {
+      // Ensure content script is injected (enhanced-pdf-handler does this, but just in case)
+      if (window.PDFHandler) {
+        await window.PDFHandler.ensureContentScriptWithRetry(tab.id);
+      }
+      
+      const importableStatus = await chrome.tabs.sendMessage(tab.id, { action: 'checkImportableStatus' });
+      if (importableStatus && importableStatus.isImportable) {
+        return { type: 'importable', status: importableStatus };
+      }
+    } catch (e) {
+      console.warn('Importable status check failed:', e);
+    }
+
+    return { type: 'none' };
+  }
+
+  function displayName(url, title) {
+    if (title && title !== 'Untitled' && !title.includes('http')) return title;
     try {
       const decoded = decodeURIComponent(url);
       const name = decoded.split('/').pop().split('?')[0] || decoded;
@@ -53,33 +99,51 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ── Import ─────────────────────────────────────────────────────
-  async function triggerImport(tab) {
+  async function triggerImport(tab, mode = 'pdf') {
     show('importing');
 
-    // Re-signal the content script (noop if alreadySent; covers manual/file:// case)
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'pdfDetected',
-        details: { url: tab.url, method: 'manual' }
-      });
-    } catch (_) {
-      // Content script might not be injected yet on file:// or viewer pages — that's ok,
-      // background.js already sent pdfDetected on navigation. We just wait below.
+    if (mode === 'pdf') {
+      // Re-signal the content script
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'pdfDetected',
+          details: { url: tab.url, method: 'manual' }
+        });
+      } catch (_) {
+        // background.js already sent pdfDetected on navigation. We just wait below.
+      }
+    } else {
+      // URL-based import (for non-PDF pages)
+      try {
+        await chrome.runtime.sendMessage({
+          action: 'triggerPDFAnalysis',
+          tabId: tab.id,
+          options: { forceUrl: true }
+        });
+      } catch (err) {
+        console.error('Trigger analysis failed:', err);
+      }
     }
 
-    // Wait for background to confirm the PDF is ready
+    // Wait for background to confirm completion
     await new Promise((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error('Import timed out. The PDF may already be in your library.')),
+        () => reject(new Error('Import timed out. The paper may already be in your library.')),
         IMPORT_TIMEOUT_MS
       );
 
       function listener(msg) {
         if (msg.action === 'pdfReady' && msg.tabId === tab.id) {
+          console.log('Received pdfReady message in triggerImport wait loop:', msg);
           clearTimeout(timer);
           chrome.runtime.onMessage.removeListener(listener);
           currentPaperId = msg.paperId || null;
+          console.log('Updated currentPaperId to:', currentPaperId);
           resolve();
+        } else if (msg.action === 'analysisError' && msg.tabId === tab.id) {
+          clearTimeout(timer);
+          chrome.runtime.onMessage.removeListener(listener);
+          reject(new Error(msg.error || 'Import failed'));
         }
       }
       chrome.runtime.onMessage.addListener(listener);
@@ -88,20 +152,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     show('done');
   }
 
-  // ── Open web app ───────────────────────────────────────────────
-  function openApp() {
-    const url = currentPaperId
-      ? `${WEB_APP}/app?paperID=${encodeURIComponent(currentPaperId)}`
-      : `${WEB_APP}/app`;
-    chrome.tabs.create({ url });
-  }
-
+  // ── Event Listeners ─────────────────────────────────────────────
   document.getElementById('open-app-from-pdf').addEventListener('click', openApp);
+  document.getElementById('open-app-from-importable')?.addEventListener('click', openApp);
   document.getElementById('open-app-no-pdf').addEventListener('click', openApp);
   document.getElementById('open-app-error').addEventListener('click', openApp);
   document.getElementById('view-btn').addEventListener('click', openApp);
+  
   document.getElementById('settings-btn').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
+  });
+
+  document.getElementById('import-page-btn')?.addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) triggerImport(tab, 'url').catch(err => {
+      document.getElementById('error-message').textContent = err.message;
+      show('error');
+    });
+  });
+
+  document.getElementById('analyze-anyway-btn')?.addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) triggerImport(tab, 'url').catch(err => {
+      document.getElementById('error-message').textContent = err.message;
+      show('error');
+    });
   });
 
   // ── Connect flow ───────────────────────────────────────────────
@@ -128,41 +203,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) { show('noPdf'); return; }
 
-    const bgStatus = await getPdfStatus(tab.id);
+    const status = await checkTabStatus(tab);
+    const bgStatus = status.status || {};
 
-    if (bgStatus.isPDF) {
-      // Background confirmed PDF via content-type headers
-      if (bgStatus.pdfReady) {
-        currentPaperId = bgStatus.paperId || null;
-        show('done');
-      } else {
-        // Auto-import is in progress; show PDF state so user can also trigger manually
-        show('pdf');
-        document.getElementById('pdf-filename').textContent = displayName(bgStatus.url || tab.url);
-        document.getElementById('import-btn').onclick = () =>
-          triggerImport(tab).catch(err => {
-            document.getElementById('error-message').textContent = err.message;
-            show('error');
-          });
+    // Check if already done or in progress
+    if (bgStatus.pdfReady) {
+      currentPaperId = bgStatus.paperId || null;
+      console.log('Init: Paper already ready, currentPaperId:', currentPaperId);
+      show('done');
+      return;
+    }
 
-        // Also listen in case background finishes while popup is open
-        chrome.runtime.onMessage.addListener(function autoListener(msg) {
-          if (msg.action === 'pdfReady' && msg.tabId === tab.id) {
-            currentPaperId = msg.paperId || null;
-            chrome.runtime.onMessage.removeListener(autoListener);
-            show('done');
-          }
-        });
-      }
-    } else if (looksLikePdf(tab.url)) {
-      // URL heuristic — background may have missed it (e.g. after service-worker restart)
+    if (bgStatus.analysisInProgress) {
+      show('importing');
+      // Set up listener to transition to done
+      chrome.runtime.onMessage.addListener(function autoListener(msg) {
+        if (msg.action === 'pdfReady' && msg.tabId === tab.id) {
+          console.log('Received pdfReady during in-progress analysis:', msg);
+          currentPaperId = msg.paperId || null;
+          console.log('Updated currentPaperId to:', currentPaperId);
+          chrome.runtime.onMessage.removeListener(autoListener);
+          show('done');
+        } else if (msg.action === 'analysisError' && msg.tabId === tab.id) {
+          chrome.runtime.onMessage.removeListener(autoListener);
+          document.getElementById('error-message').textContent = msg.error || 'Import failed';
+          show('error');
+        }
+      });
+      return;
+    }
+
+    if (status.type === 'pdf') {
       show('pdf');
-      document.getElementById('pdf-filename').textContent = displayName(tab.url);
+      document.getElementById('pdf-filename').textContent = displayName(bgStatus.url || tab.url, tab.title);
       document.getElementById('import-btn').onclick = () =>
-        triggerImport(tab).catch(err => {
+        triggerImport(tab, 'pdf').catch(err => {
           document.getElementById('error-message').textContent = err.message;
           show('error');
         });
+
+      chrome.runtime.onMessage.addListener(function autoListener(msg) {
+        if (msg.action === 'pdfReady' && msg.tabId === tab.id) {
+          console.log('Received pdfReady for detected PDF:', msg);
+          currentPaperId = msg.paperId || null;
+          console.log('Updated currentPaperId to:', currentPaperId);
+          chrome.runtime.onMessage.removeListener(autoListener);
+          show('done');
+        }
+      });
+    } else if (status.type === 'importable') {
+      show('importable');
+      document.getElementById('importable-title').textContent = displayName(status.status.url, status.status.title);
     } else {
       show('noPdf');
     }

@@ -52,11 +52,21 @@
     <button id="view-btn" class="btn-primary">View in Essence Scholar ↗</button>
   </div>
 
+  <!-- ── State: Research Page detected ────────────── -->
+  <div id="state-importable" class="content state">
+    <div class="state-icon blue">📝</div>
+    <div class="state-title">Research Page Detected</div>
+    <div id="importable-title" class="state-subtitle"></div>
+    <button id="import-page-btn" class="btn-primary">Analyze Page Content</button>
+    <button id="open-app-from-importable" class="btn-secondary">Open Essence Scholar ↗</button>
+  </div>
+
   <!-- ── State: Not a PDF ───────────────────────────── -->
   <div id="state-no-pdf" class="content state">
     <div class="state-icon muted">🔍</div>
     <div class="state-title">No PDF on This Page</div>
-    <div class="state-subtitle">Navigate to an academic PDF and click this icon to import it into your library</div>
+    <div class="state-subtitle">Navigate to an academic PDF or research article to import it into your library</div>
+    <button id="analyze-anyway-btn" class="btn-primary">Try Analyzing Anyway</button>
     <button id="open-app-no-pdf" class="btn-secondary">Open Essence Scholar ↗</button>
   </div>
 
@@ -75,6 +85,7 @@
 
   <script src="config.js"></script>
   <script src="shared-id-generator.js"></script>
+  <script src="enhanced-pdf-handler.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -123,86 +123,38 @@ async function sha256(input) {
 }
 
 /** Ingest PDF — returns paper_id or null.
- *  With bytes: POST base64 to /analyze-stream (works for file:// and https://).
- *  URL-only fallback: POST to /process-paper-url (https:// only).
+ *  Delegates network request to background script to bypass CSP/CORS.
  */
 async function sendToBackend({bytes, url}) {
-  const BACKEND_URL = await getBackendUrl();
-  if (!BACKEND_URL) {
-    console.warn('[PDF-collector] No backend URL available');
-    return null;
-  }
-
-  let apiKey = null;
-  try {
-    const r = await chrome.storage.local.get(['essenceScholarApiKey']);
-    apiKey = r.essenceScholarApiKey || null;
-    if (!apiKey) {
-      const r2 = await chrome.storage.sync.get(['essence_scholar_api_key']);
-      apiKey = r2.essence_scholar_api_key || null;
-    }
-  } catch (_) {}
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-
-  // ── Strategy A: upload bytes via /analyze-stream ──────────────────────────
-  if (bytes) {
-    console.log('[PDF-collector] Uploading bytes via /analyze-stream');
-    try {
-      const b64 = arrayBufferToBase64(bytes);
-      const response = await fetch(`${BACKEND_URL}/analyze-stream`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          file_content: b64,
-          model: 'gemini-2.5-flash-preview-04-17',
-          source: 'browser_extension'
-        }),
-        signal: AbortSignal.timeout(120000)
-      });
-
-      if (!response.ok) {
-        console.error('[PDF-collector] /analyze-stream failed:', response.status);
-        return null;
+  return new Promise((resolve, reject) => {
+    console.log('[PDF-collector] Sending ingest request to background script');
+    
+    let b64 = null;
+    if (bytes) {
+      try {
+        b64 = arrayBufferToBase64(bytes);
+      } catch (e) {
+        console.error('[PDF-collector] Base64 conversion failed:', e);
       }
-
-      const paperId = await parseSseForPaperId(response);
-      console.log('[PDF-collector] /analyze-stream paper_id:', paperId);
-      return paperId;
-    } catch (err) {
-      console.error('[PDF-collector] /analyze-stream error:', err.message);
-      return null;
     }
-  }
 
-  // ── Strategy B: URL-only via /process-paper-url ───────────────────────────
-  if (!url || url.startsWith('file://')) {
-    console.warn('[PDF-collector] No bytes and no fetchable URL — cannot ingest');
-    return null;
-  }
-
-  console.log('[PDF-collector] Ingesting URL via /process-paper-url:', url);
-  try {
-    const response = await fetch(`${BACKEND_URL}/process-paper-url`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ paper_url: url, source: 'browser_extension' }),
-      signal: AbortSignal.timeout(120000)
+    chrome.runtime.sendMessage({
+      action: 'proxyAnalyzeStream',
+      file_content: b64,
+      url: url,
+      source: 'browser_extension_collector'
+    }, response => {
+      if (chrome.runtime.lastError) {
+        console.error('[PDF-collector] Message error:', chrome.runtime.lastError);
+        resolve(null);
+      } else if (response && response.success) {
+        resolve(response.paperId);
+      } else {
+        console.warn('[PDF-collector] Background ingestion failed:', response?.error);
+        resolve(null);
+      }
     });
-
-    if (!response.ok) {
-      console.error('[PDF-collector] /process-paper-url failed:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    console.log('[PDF-collector] /process-paper-url paper_id:', data.paper_id);
-    return data.paper_id || null;
-  } catch (err) {
-    console.error('[PDF-collector] /process-paper-url error:', err.message);
-    return null;
-  }
+  });
 }
 
 /** Convert ArrayBuffer to base64 string */
@@ -211,48 +163,6 @@ function arrayBufferToBase64(buffer) {
   let binary = '';
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
-}
-
-/** Read an SSE response stream and return paper_id from the first 'completed' event */
-async function parseSseForPaperId(response) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop(); // keep incomplete last line
-
-    for (const line of lines) {
-      if (!line.startsWith('data:')) continue;
-      try {
-        const event = JSON.parse(line.slice(5).trim());
-        if (event.status === 'completed' && event.paper_id) {
-          reader.cancel();
-          return event.paper_id;
-        }
-        if (event.status === 'error') {
-          console.error('[PDF-collector] SSE error:', event.message);
-          reader.cancel();
-          return null;
-        }
-      } catch (_) {}
-    }
-  }
-  return null;
-}
-
-/** Get backend URL — prefers cached choice, falls back to cloud */
-async function getBackendUrl() {
-  try {
-    const result = await chrome.storage.local.get(['currentBackend']);
-    if (result.currentBackend?.url) return result.currentBackend.url;
-  } catch (_) {}
-  return 'https://ssrn-summarizer-backend-v1-8-0-pisqy7uvxq-uc.a.run.app';
 }
 
 // Also expose a simple ping handler for compatibility

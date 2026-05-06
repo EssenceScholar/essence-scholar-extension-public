@@ -9,7 +9,7 @@ const CONFIG = {
       enabled: true
     },
     CLOUD_RUN: {
-      url: 'https://ssrn-summarizer-backend-v1-6-1-pisqy7uvxq-uc.a.run.app',
+      url: 'https://ssrn-summarizer-backend-v1-8-0-pisqy7uvxq-uc.a.run.app',
       name: 'Cloud Run',
       priority: 2,
       enabled: true
@@ -41,7 +41,7 @@ const CONFIG = {
   
   // Backend detection settings
   BACKEND_CACHE_DURATION: 5 * 60 * 1000, // Cache backend choice for 5 minutes
-  AUTO_DETECT_BACKENDS: false, // Disable automatic backend detection for efficiency
+  AUTO_DETECT_BACKENDS: true, // Re-enabled automatic backend detection
   PREFER_LOCAL: true, // Prefer local backends over cloud
   
   // Backend failure tracking
@@ -49,14 +49,16 @@ const CONFIG = {
   FAILURE_RESET_DURATION: 10 * 60 * 1000, // Reset failure count after 10 minutes
 };
 
-// Service worker compatible BackendManager
+// Service worker compatible BackendManager with health checks
 class ServiceWorkerBackendManager {
   // Track consecutive failures
   static _consecutiveFailures = 0;
   static _lastFailureTime = 0;
   static _updateMessageShown = false;
+  static _cachedBackend = null;
+  static _cachedTime = 0;
 
-  // Get the priority 1 backend directly (no health checks)
+  // Get the priority 1 backend directly
   static getPriorityOneBackend() {
     const backends = Object.entries(CONFIG.BACKENDS)
       .filter(([key, backend]) => backend.enabled)
@@ -64,24 +66,71 @@ class ServiceWorkerBackendManager {
     
     if (backends.length > 0) {
       const [key, backend] = backends[0];
-      console.log(`🎯 Using priority 1 backend: ${backend.name} (${backend.url})`);
       return { key, ...backend };
     }
-    
-    console.log('❌ No enabled backends found');
     return null;
   }
 
-  // Get current backend (simplified - just return priority 1)
+  // Get current backend with health check fallback
   static async getCurrentBackend() {
-    // Get priority 1 backend (no health checks)
-    const backend = ServiceWorkerBackendManager.getPriorityOneBackend();
+    const now = Date.now();
+    if (ServiceWorkerBackendManager._cachedBackend && (now - ServiceWorkerBackendManager._cachedTime < CONFIG.BACKEND_CACHE_DURATION)) {
+      return ServiceWorkerBackendManager._cachedBackend;
+    }
+    
+    let backend = null;
+    if (CONFIG.AUTO_DETECT_BACKENDS) {
+      backend = await ServiceWorkerBackendManager.detectBestBackend();
+    } else {
+      backend = ServiceWorkerBackendManager.getPriorityOneBackend();
+    }
+
+    if (backend) {
+      ServiceWorkerBackendManager._cachedBackend = backend;
+      ServiceWorkerBackendManager._cachedTime = now;
+      console.log(`🎯 Service Worker using backend: ${backend.name} (${backend.url})`);
+    }
     return backend;
   }
 
-  // Force refresh backend choice (simplified)
+  // Detect the best available backend by checking health
+  static async detectBestBackend() {
+    const backends = ServiceWorkerBackendManager.getBackendsByPriority();
+    
+    for (const backend of backends) {
+      const isHealthy = await ServiceWorkerBackendManager.checkBackendHealth(backend);
+      if (isHealthy) {
+        return backend;
+      }
+    }
+    
+    return backends[0] || null;
+  }
+
+  // Check backend health by pinging the /health endpoint
+  static async checkBackendHealth(backend) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.HEALTH_CHECK_TIMEOUT);
+      
+      const response = await fetch(`${backend.url}${CONFIG.HEALTH_ENDPOINT}`, {
+        method: 'GET',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch (error) {
+      console.log(`⚠️ SW Health check failed for ${backend.name}: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Force refresh backend choice
   static async refreshBackend() {
-    console.log('🔄 Forced backend refresh');
+    ServiceWorkerBackendManager._cachedBackend = null;
+    ServiceWorkerBackendManager._cachedTime = 0;
+    console.log('🔄 Forced backend refresh in Service Worker');
     return await ServiceWorkerBackendManager.getCurrentBackend();
   }
 
@@ -164,19 +213,7 @@ class ServiceWorkerBackendManager {
     };
   }
 
-  // Legacy method for compatibility (now just returns priority 1)
-  static async detectBestBackend() {
-    return ServiceWorkerBackendManager.getPriorityOneBackend();
-  }
-
-  // Legacy method for compatibility (now just returns priority 1)
-  static async checkBackendHealth(backend) {
-    // Skip health checks for efficiency
-    console.log(`⏭️ Skipping health check for ${backend.name} (efficiency mode)`);
-    return true;
-  }
-
-  // Legacy method for compatibility
+  // Helper method for compatibility
   static getBackendsByPriority() {
     return Object.entries(CONFIG.BACKENDS)
       .filter(([key, backend]) => backend.enabled)
@@ -951,6 +988,7 @@ async function extractSsrnIdFromUrl(url) {
 // Function to automatically trigger PDF analysis
 async function triggerPDFAnalysis(tabId) {
   let paperUrl = undefined;
+  let paperId = undefined;
   try {
     // Check if analysis is already in progress for this tab
     if (analysisInProgress.has(tabId)) {
@@ -999,7 +1037,7 @@ async function triggerPDFAnalysis(tabId) {
           
           // If we can't connect to content script, try to extract basic info from tab
           if (tab.url.includes('ssrn.com')) {
-            const paperId = await extractSsrnIdFromUrl(tab.url);
+            paperId = await extractSsrnIdFromUrl(tab.url);
             if (paperId) {
               paperContent = {
                 paperUrl: tab.url,
@@ -1019,8 +1057,11 @@ async function triggerPDFAnalysis(tabId) {
         }
       }
       
-      // Extract paper ID
-      const paperId = await extractSsrnIdFromUrl(paperUrl);
+      // Extract paper ID (if not already set via fallback)
+      if (!paperId) {
+        paperId = await extractSsrnIdFromUrl(paperUrl);
+      }
+      
       if (!paperId) {
         throw new Error('Could not extract paper ID from URL');
       }
@@ -1105,9 +1146,36 @@ async function triggerPDFAnalysis(tabId) {
         throw new Error(errorData.error || `Backend error: ${serverResponse.status}`);
       }
 
-      const data = await serverResponse.json();
-      if (data.error) {
-        throw new Error(data.error);
+      // Handle SSE stream properly
+      const reader = serverResponse.body.getReader();
+      const decoder = new TextDecoder();
+      let data = {};
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.substring(6));
+              // Merge event data into our final data object
+              data = { ...data, ...eventData };
+              
+              // Update paperId if returned
+              if (eventData.paper_id) {
+                paperId = eventData.paper_id;
+              }
+              
+              // Log progress
+              if (eventData.status && eventData.message) {
+                console.log(`[BG] Analysis progress: ${eventData.status} - ${eventData.message}`);
+              }
+            } catch (e) {}
+          }
+        }
       }
 
       console.log('Background: Analysis completed successfully, storing results for paper:', paperId);
@@ -1158,8 +1226,15 @@ async function triggerPDFAnalysis(tabId) {
       chrome.action.setBadgeText({ text: '✓' });
       chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
 
-      // Notify popup
+      // Notify popup - Send BOTH for compatibility
       try {
+        chrome.runtime.sendMessage({
+          action: 'pdfReady',
+          tabId: tabId,
+          paperId: paperId,
+          pdf: { url: paperUrl, paperId: paperId }
+        }).catch(() => {});
+
         chrome.runtime.sendMessage({
           action: 'analysisComplete',
           paperId: paperId,
@@ -1179,6 +1254,8 @@ async function triggerPDFAnalysis(tabId) {
       const finalState = activeTabs.get(tabId) || {};
       finalState.analysisInProgress = false;
       finalState.analysisQueued = false;
+      finalState.pdfReady = true;
+      finalState.paperId = paperId;
       finalState.lastUpdated = Date.now();
       activeTabs.set(tabId, finalState);
       
@@ -1191,6 +1268,15 @@ async function triggerPDFAnalysis(tabId) {
   } catch (error) {
     console.error(`Background: Error in analysis for tab ${tabId}:`, error);
     
+    // Notify popup of error
+    try {
+      chrome.runtime.sendMessage({
+        action: 'analysisError',
+        tabId: tabId,
+        error: error.message
+      }).catch(() => {});
+    } catch (e) {}
+
     // Set analysis status to error
     try {
       const STATUS_KEY = 'analysisStatus';
@@ -1441,10 +1527,18 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         contentType: pdfInfo.contentType,
         method: 'background-cache',
         pdfReady: tabState?.pdfReady || false,
-        paperId: tabState?.paperId || null
+        paperId: tabState?.paperId || null,
+        analysisInProgress: tabState?.analysisInProgress || false,
+        analysisError: tabState?.analysisError || null
       });
     } else {
-      sendResponse({ isPDF: false });
+      sendResponse({ 
+        isPDF: false,
+        analysisInProgress: tabState?.analysisInProgress || false,
+        analysisError: tabState?.analysisError || null,
+        pdfReady: tabState?.pdfReady || false,
+        paperId: tabState?.paperId || null
+      });
     }
     return true;
   }
@@ -1540,8 +1634,97 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'proxyAnalyzeStream') {
+    const { file_content, url, source } = request;
+    const tabId = sender.tab?.id;
+    
+    (async () => {
+      try {
+        console.log('[BG Proxy] Starting proxy analysis for:', url);
+        const backend = await ServiceWorkerBackendManager.getCurrentBackend();
+        const llmSettings = (await chrome.storage.local.get(['llmSettings'])).llmSettings || { model: 'gemini' };
+        
+        const response = await makeApiRequestWithBackend(CONFIG.ANALYZE_STREAM_ENDPOINT, {
+          method: 'POST',
+          body: JSON.stringify({
+            file_content,
+            content: { paperUrl: url },
+            model: llmSettings.model,
+            source: source || 'browser_extension_proxy'
+          })
+        }, backend);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[BG Proxy] Backend error:', response.status, errorText);
+          sendResponse({ success: false, error: `Backend error ${response.status}` });
+          return;
+        }
+
+        // Parse SSE stream to find paper_id
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let paperId = null;
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const eventData = JSON.parse(line.substring(6));
+                // Extract paper_id from any event that has it
+                if (eventData.paper_id) {
+                  paperId = eventData.paper_id;
+                } else if (eventData.analysis_id && !paperId) {
+                  paperId = eventData.analysis_id;
+                }
+                
+                // Log progress if available
+                if (eventData.status && eventData.message) {
+                  console.log(`[BG Proxy] Status: ${eventData.status} - ${eventData.message} (paperId: ${paperId})`);
+                }
+              } catch (e) {}
+            }
+          }
+          // Do NOT break here - wait for the stream to complete to ensure the digest is ready
+        }
+        
+        console.log('[BG Proxy] Analysis stream complete, final paperId:', paperId);
+        sendResponse({ success: true, paperId });
+      } catch (error) {
+        console.error('[BG Proxy] Error:', error.message);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (request.action === 'triggerPDFAnalysis') {
+    const tabId = request.tabId || sender.tab?.id;
+    if (tabId) {
+      triggerPDFAnalysis(tabId).catch(err => {
+        console.error('[BG] Error from triggerPDFAnalysis message:', err);
+      });
+      sendResponse({ success: true, queued: true });
+    } else {
+      sendResponse({ error: 'No tabId provided' });
+    }
+    return true;
+  }
+
+  if (request.action === 'pdfDetected' && sender.tab) {
+    // Forward from content script/popup if needed, but usually background handles this via webRequest
+    console.log('[BG] pdfDetected message from tab', sender.tab.id, request.details);
+    // You could trigger analysis here if not already started
+    return true;
+  }
+
   // Existing sender.tab guard for other messages
-  if (!sender.tab && request.action !== 'analysisStarted') {
+  if (!sender.tab && request.action !== 'analysisStarted' && request.action !== 'startMonitoring' && request.action !== 'stopMonitoring' && request.action !== 'getMonitoringStatus') {
     console.warn('Message received without tab context:', request);
     sendResponse({ error: 'No tab context available' });
     return true;

@@ -420,6 +420,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })();
     return true; // Keep the message channel open for async response
   }
+
+  if (request.action === 'checkImportableStatus') {
+    (async () => {
+      try {
+        const url = window.location.href.toLowerCase();
+        const isSSRN = url.includes('ssrn.com') && (url.includes('abstract_id=') || url.includes('abstract='));
+        const isArxiv = url.includes('arxiv.org/abs/');
+        
+        // Generic research page detection
+        const hasAbstract = !!(document.querySelector('.abstract-text') || 
+                               document.querySelector('[data-test-id="abstract"]') ||
+                               document.querySelector('.abstract') ||
+                               document.querySelector('#abstract'));
+        
+        const isImportable = isSSRN || isArxiv || hasAbstract;
+        const type = isSSRN ? 'ssrn' : (isArxiv ? 'arxiv' : (hasAbstract ? 'article' : 'unknown'));
+        
+        console.log('[Content Script] Importable status check:', { isImportable, type, url });
+        
+        sendResponse({ 
+          isImportable: isImportable,
+          type: type,
+          url: window.location.href,
+          title: document.title
+        });
+      } catch (error) {
+        console.error('[Content Script] Error in importable status check:', error);
+        sendResponse({ isImportable: false, error: error.message });
+      }
+    })();
+    return true;
+  }
   
   if (request.action === 'readPDFContent') {
     // Read PDF content from the current page

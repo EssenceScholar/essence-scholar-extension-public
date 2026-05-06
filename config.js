@@ -5,7 +5,7 @@ const CONFIG = {
     LOCAL_DEV: {
       url: 'http://localhost:8080',
       name: 'Local Development',
-      priority: 2,
+      priority: 1,
       enabled: true
     },
     CLOUD_RUN: {
@@ -41,7 +41,7 @@ const CONFIG = {
   
   // Backend detection settings
   BACKEND_CACHE_DURATION: 5 * 60 * 1000, // Cache backend choice for 5 minutes (increased from 2)
-  AUTO_DETECT_BACKENDS: false, // Disable automatic backend detection for efficiency
+  AUTO_DETECT_BACKENDS: true, // Re-enabled automatic backend detection
   PREFER_LOCAL: true, // Prefer local backends over cloud
   
   // Backend failure tracking
@@ -49,14 +49,14 @@ const CONFIG = {
   FAILURE_RESET_DURATION: 10 * 60 * 1000, // Reset failure count after 10 minutes
 };
 
-// Optimized backend selection - simply use priority 1 backend
+// Optimized backend selection with health checks
 class BackendManager {
   // Track consecutive failures
   static _consecutiveFailures = 0;
   static _lastFailureTime = 0;
   static _updateMessageShown = false;
 
-  // Get the priority 1 backend directly (no health checks)
+  // Get the priority 1 backend directly
   static getPriorityOneBackend() {
     const backends = Object.entries(CONFIG.BACKENDS)
       .filter(([key, backend]) => backend.enabled)
@@ -64,137 +64,67 @@ class BackendManager {
     
     if (backends.length > 0) {
       const [key, backend] = backends[0];
-      console.log(`🎯 Using priority 1 backend: ${backend.name} (${backend.url})`);
       return { key, ...backend };
     }
-    
-    console.log('❌ No enabled backends found');
     return null;
   }
 
-  // Get current backend (simplified - just return priority 1)
+  // Get current backend with health check fallback
   static async getCurrentBackend() {
     // Check if we have a cached backend choice
     if (window.currentBackend && window.backendCacheTime) {
       const now = Date.now();
       if (now - window.backendCacheTime < CONFIG.BACKEND_CACHE_DURATION) {
-        console.log(`🔄 Using cached backend: ${window.currentBackend.name}`);
         return window.currentBackend;
       }
     }
     
-    // Get priority 1 backend (no health checks)
-    const backend = BackendManager.getPriorityOneBackend();
+    let backend = null;
+    if (CONFIG.AUTO_DETECT_BACKENDS) {
+      backend = await BackendManager.detectBestBackend();
+    } else {
+      backend = BackendManager.getPriorityOneBackend();
+    }
+
     if (backend) {
       window.currentBackend = backend;
       window.backendCacheTime = Date.now();
-      console.log(`💾 Cached backend choice: ${backend.name}`);
+      console.log(`🎯 Using backend: ${backend.name} (${backend.url})`);
     }
     return backend;
   }
 
-  // Force refresh backend choice (simplified)
-  static async refreshBackend() {
-    window.currentBackend = null;
-    window.backendCacheTime = null;
-    console.log('🔄 Forced backend refresh');
-    return await BackendManager.getCurrentBackend();
-  }
-
-  // Track backend failure and show update message if needed
-  static trackBackendFailure(error = null) {
-    const now = Date.now();
-    
-    // Reset failure count if enough time has passed
-    if (now - BackendManager._lastFailureTime > CONFIG.FAILURE_RESET_DURATION) {
-      BackendManager._consecutiveFailures = 0;
-      BackendManager._updateMessageShown = false;
-    }
-    
-    BackendManager._consecutiveFailures++;
-    BackendManager._lastFailureTime = now;
-    
-    console.log(`❌ Backend failure #${BackendManager._consecutiveFailures} tracked`);
-    
-    // Show update message after 2 consecutive failures
-    if (BackendManager._consecutiveFailures >= CONFIG.MAX_CONSECUTIVE_FAILURES && !BackendManager._updateMessageShown) {
-      BackendManager._updateMessageShown = true;
-      BackendManager.showUpdateMessage();
-    }
-  }
-
-  // Show user-friendly update message
-  static showUpdateMessage() {
-    console.log('⚠️ Showing extension update message to user');
-    
-    // Create a user-friendly message
-    const message = {
-      type: 'extension_update_required',
-      title: 'Extension Update Required',
-      message: 'Your extension needs to be updated to work with the latest backend. Please update the extension from the Chrome Web Store.',
-      action: 'update_extension',
-      timestamp: Date.now()
-    };
-    
-    // Try to show the message in different contexts
-    try {
-      // Method 1: Send message to popup if available
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({
-          action: 'showUpdateMessage',
-          message: message
-        }).catch(() => {
-          // Ignore errors if popup is not available
-        });
-      }
-      
-      // Method 2: Show alert if in fullpage context
-      if (typeof window !== 'undefined' && window.location && window.location.href.includes('fullpage.html')) {
-        alert('⚠️ Extension Update Required\n\nYour extension needs to be updated to work with the latest backend. Please update the extension from the Chrome Web Store.');
-      }
-      
-      // Method 3: Store message for popup to read
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        chrome.storage.local.set({
-          'extension_update_message': message
-        }).catch(() => {
-          // Ignore storage errors
-        });
-      }
-      
-    } catch (error) {
-      console.error('Error showing update message:', error);
-    }
-  }
-
-  // Reset failure tracking (call this on successful requests)
-  static resetFailureTracking() {
-    BackendManager._consecutiveFailures = 0;
-    BackendManager._lastFailureTime = 0;
-    BackendManager._updateMessageShown = false;
-    console.log('✅ Backend failure tracking reset');
-  }
-
-  // Get current failure status
-  static getFailureStatus() {
-    return {
-      consecutiveFailures: BackendManager._consecutiveFailures,
-      lastFailureTime: BackendManager._lastFailureTime,
-      updateMessageShown: BackendManager._updateMessageShown,
-      shouldShowUpdate: BackendManager._consecutiveFailures >= CONFIG.MAX_CONSECUTIVE_FAILURES
-    };
-  }
-
-  // Legacy method for compatibility (now just returns priority 1)
+  // Detect the best available backend by checking health
   static async detectBestBackend() {
-    return BackendManager.getPriorityOneBackend();
+    const backends = BackendManager.getBackendsByPriority();
+    
+    for (const backend of backends) {
+      const isHealthy = await BackendManager.checkBackendHealth(backend);
+      if (isHealthy) {
+        return backend;
+      }
+    }
+    
+    return backends[0] || null;
   }
 
-  // Legacy method for compatibility (now just returns priority 1)
+  // Check backend health by pinging the /health endpoint
   static async checkBackendHealth(backend) {
-    // Skip health checks for efficiency
-    console.log(`⏭️ Skipping health check for ${backend.name} (efficiency mode)`);
-    return true;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.HEALTH_CHECK_TIMEOUT);
+      
+      const response = await fetch(`${backend.url}${CONFIG.HEALTH_ENDPOINT}`, {
+        method: 'GET',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch (error) {
+      console.log(`⚠️ Health check failed for ${backend.name}: ${error.message}`);
+      return false;
+    }
   }
 
   // Legacy method for compatibility
