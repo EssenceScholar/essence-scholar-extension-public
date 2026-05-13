@@ -6,12 +6,24 @@
 
 let alreadySent = false;
 
-/** Listen for the background "go" signal */
+/** Listen for the background signal */
 chrome.runtime.onMessage.addListener(async (msg, _sender, sendResponse) => {
-  if (msg.action !== 'pdfDetected' || alreadySent) return;
-  alreadySent = true;
+  if (msg.action !== 'pdfDetected') return;
 
-  console.log('[PDF-collector] PDF detected, starting collection process');
+  // ONLY proceed if this is a manual trigger from the popup/user
+  // We ignore the automatic 'webRequest' signal from background.js to prevent auto-digestion
+  if (msg.details?.method !== 'manual' && !msg.force) {
+    console.info('[PDF-collector] PDF detected. Auto-digestion is DISABLED. Waiting for manual trigger (click "Import" in the popup).');
+    return;
+  }
+
+  if (alreadySent) {
+    console.log('[PDF-collector] PDF already collected/sent for this session');
+    return;
+  }
+  
+  alreadySent = true;
+  console.log('[PDF-collector] Manual PDF trigger received, starting collection process');
 
   try {
     const payload = await grabPDF();
@@ -25,16 +37,31 @@ chrome.runtime.onMessage.addListener(async (msg, _sender, sendResponse) => {
 
     console.log('[PDF-collector] PDF ready, paper_id:', paperId);
   } catch (err) {
-    console.warn('[PDF-collector] Could not collect PDF bytes, falling back to URL:', err.message);
+    // Reset alreadySent so the user can retry
+    alreadySent = false;
+    
+    console.warn('[PDF-collector] Content script could not collect PDF bytes:', err.message);
 
+    // Fallback: send the URL to the background script and let IT try to fetch the bytes.
+    // This is often more successful for file:// URLs as the background has broader permissions.
     const url = location.href;
-    const paperId = await sendToBackend({ url });
+    try {
+      const paperId = await sendToBackend({ url });
 
-    chrome.runtime.sendMessage({
-      status: 'ready',
-      paperId,
-      pdf: { url, fallback: true, source: 'url_fallback' }
-    });
+      chrome.runtime.sendMessage({
+        status: 'ready',
+        paperId,
+        pdf: { url, fallback: true, source: 'background_fetch_fallback' }
+      });
+      console.log('[PDF-collector] PDF ready via background fetch, paper_id:', paperId);
+    } catch (bgErr) {
+      console.error('[PDF-collector] Background fetch fallback also failed:', bgErr.message);
+      chrome.runtime.sendMessage({
+        action: 'analysisError',
+        tabId: -1,
+        error: bgErr.message
+      });
+    }
   }
 });
 
@@ -47,8 +74,20 @@ async function grabPDF() {
   if (location.protocol === 'blob:') return fetchBytes(url);
 
   // file:// — Chrome PDF viewer doesn't expose a blob URL to content scripts;
-  // use XHR which works when "Allow access to file URLs" is enabled for the extension
-  if (location.protocol === 'file:') return fetchBytesXHR(url);
+  if (location.protocol === 'file:') {
+    try {
+      // Try XHR first (traditionally more successful for file:// in content scripts)
+      return await fetchBytesXHR(url);
+    } catch (xhrErr) {
+      console.log('[PDF-collector] XHR failed for local file, trying fetch()...');
+      try {
+        // Fallback to fetch()
+        return await fetchBytes(url);
+      } catch (fetchErr) {
+        throw new Error(`Local file access denied. Please ensure "Allow access to file URLs" is enabled in chrome://extensions and RELOAD this page.`);
+      }
+    }
+  }
 
   // https:// — wait for Chrome's built-in PDF viewer to expose a blob: embed URL
   const blobSrc = await new Promise(resolve => {
@@ -144,13 +183,15 @@ async function sendToBackend({bytes, url}) {
       url: url,
       source: 'browser_extension_collector'
     }, response => {
-      if (chrome.runtime.lastError) {
-        console.error('[PDF-collector] Message error:', chrome.runtime.lastError);
+      const error = chrome.runtime.lastError;
+      if (error) {
+        console.error('[PDF-collector] Message error:', error.message);
         resolve(null);
       } else if (response && response.success) {
         resolve(response.paperId);
       } else {
-        console.warn('[PDF-collector] Background ingestion failed:', response?.error);
+        const errorMsg = response?.error || 'Unknown background error';
+        console.warn('[PDF-collector] Background ingestion failed:', errorMsg);
         resolve(null);
       }
     });

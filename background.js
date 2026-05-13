@@ -1461,7 +1461,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 // =============================================================================
 
 // Listen for messages from popup and content scripts
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Add monitoring control handlers
   if (request.action === 'startMonitoring') {
     const { paperId, tabId, backend } = request;
@@ -1635,12 +1635,27 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   }
 
   if (request.action === 'proxyAnalyzeStream') {
-    const { file_content, url, source } = request;
+    let { file_content, url, source } = request;
     const tabId = sender.tab?.id;
     
     (async () => {
       try {
         console.log('[BG Proxy] Starting proxy analysis for:', url);
+
+        // If we don't have file_content and it's a local file, try to fetch it here in the background
+        // Service workers often have better success reading file:// than content scripts in PDF viewers
+        if (!file_content && url && url.startsWith('file://')) {
+          try {
+            console.log('[BG Proxy] Attempting background fetch for local file:', url);
+            file_content = await fetchPdfBytesToBase64(url);
+            console.log('[BG Proxy] Background fetch successful, size:', file_content.length);
+          } catch (fetchErr) {
+            console.error('[BG Proxy] Background fetch failed:', fetchErr.message);
+            // If background fetch also fails, we can't proceed with local files
+            throw new Error(`Could not read local file. Please ensure "Allow access to file URLs" is enabled in chrome://extensions and RELOAD the page.`);
+          }
+        }
+
         const backend = await ServiceWorkerBackendManager.getCurrentBackend();
         const llmSettings = (await chrome.storage.local.get(['llmSettings'])).llmSettings || { model: 'gemini' };
         
@@ -1696,8 +1711,9 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         console.log('[BG Proxy] Analysis stream complete, final paperId:', paperId);
         sendResponse({ success: true, paperId });
       } catch (error) {
-        console.error('[BG Proxy] Error:', error.message);
-        sendResponse({ success: false, error: error.message });
+        const errorMsg = error.message || error.toString() || 'Unknown background error';
+        console.error('[BG Proxy] Error:', errorMsg);
+        sendResponse({ success: false, error: errorMsg });
       }
     })();
     return true;
@@ -1765,29 +1781,33 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
     sendResponse({ status: 'ok', timestamp: Date.now() });
   } else if (request.action === 'testPaperId') {
     // Test paper ID generation
-    try {
-      const paperId = await extractSsrnIdFromUrl(request.url);
-      sendResponse({ success: true, paperId: paperId, url: request.url });
-    } catch (error) {
-      sendResponse({ success: false, error: error.message });
-    }
+    (async () => {
+      try {
+        const paperId = await extractSsrnIdFromUrl(request.url);
+        sendResponse({ success: true, paperId: paperId, url: request.url });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
   } else if (request.action === 'testBackend') {
     // Test backend detection
-    try {
-      const backend = await ServiceWorkerBackendManager.getCurrentBackend();
-      sendResponse({ 
-        success: true, 
-        backendAvailable: !!backend,
-        backendUrl: backend?.url || null,
-        status: backend ? 'Available' : 'No healthy backend found'
-      });
-    } catch (error) {
-      sendResponse({ 
-        success: false, 
-        error: error.message,
-        backendAvailable: false 
-      });
-    }
+    (async () => {
+      try {
+        const backend = await ServiceWorkerBackendManager.getCurrentBackend();
+        sendResponse({ 
+          success: true, 
+          backendAvailable: !!backend,
+          backendUrl: backend?.url || null,
+          status: backend ? 'Available' : 'No healthy backend found'
+        });
+      } catch (error) {
+        sendResponse({ 
+          success: false, 
+          error: error.message,
+          backendAvailable: false 
+        });
+      }
+    })();
   } else {
     console.log('Unknown message action:', request.action);
     sendResponse({ error: 'Unknown action' });

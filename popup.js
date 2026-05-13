@@ -71,7 +71,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 3. Check for Importable Content
     try {
-      // Ensure content script is injected (enhanced-pdf-handler does this, but just in case)
+      // Check if URL is accessible before even trying to inject/message
+      if (window.PDFHandler && !window.PDFHandler.isUrlAccessibleForContentScript(tab.url)) {
+        console.log('[Popup] URL not accessible for content script injection, skipping importable check.');
+        return { type: 'none' };
+      }
+
       if (window.PDFHandler) {
         await window.PDFHandler.ensureContentScriptWithRetry(tab.id);
       }
@@ -81,7 +86,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         return { type: 'importable', status: importableStatus };
       }
     } catch (e) {
-      console.warn('Importable status check failed:', e);
+      // Log as info/debug rather than warning if it's a known restriction
+      if (e.message.includes('chrome://') || e.message.includes('restricted')) {
+        console.log('Restricted URL info:', e.message);
+      } else {
+        console.warn('Importable status check failed:', e);
+      }
     }
 
     return { type: 'none' };
