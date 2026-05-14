@@ -9,7 +9,7 @@ const CONFIG = {
       enabled: true
     },
     CLOUD_RUN: {
-      url: 'https://ssrn-summarizer-backend-v1-8-pisqy7uvxq-uc.a.run.app',
+      url: 'https://ssrn-summarizer-backend-v1-8-0-pisqy7uvxq-uc.a.run.app',
       name: 'Cloud Run',
       priority: 1,
       enabled: true
