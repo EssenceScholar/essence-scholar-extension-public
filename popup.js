@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const WEB_APP = 'https://essencescholar.com';
   const IMPORT_TIMEOUT_MS = 60000;
   let currentPaperId = null;
+  let detectedMeta = null;   // paper-page detection result (pdfUrl, doi, title, …)
 
   // ── State machine ──────────────────────────────────────────────
   const stateEls = {
@@ -122,16 +123,38 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (_) {
         // background.js already sent pdfDetected on navigation. We just wait below.
       }
+    } else if (mode === 'paper') {
+      // Detected paper landing page. Ask the content script to grab the PDF
+      // with the user's session cookies (paywall-friendly); it forwards to the
+      // backend, which falls back to resolving/downloading from url/doi/title.
+      const meta = detectedMeta || { url: tab.url };
+      try {
+        if (window.PDFHandler) await window.PDFHandler.ensureContentScriptWithRetry(tab.id);
+        await chrome.tabs.sendMessage(tab.id, { action: 'importDetectedPaper', meta });
+      } catch (err) {
+        console.warn('Content-script paper import failed, deferring to backend:', err);
+        await chrome.runtime.sendMessage({
+          action: 'proxyAnalyzeStream',
+          url: meta.url || tab.url,
+          pdf_url: meta.pdfUrl || null,
+          doi: meta.doi || null,
+          title: meta.citationTitle || null,  // trusted title only, for verification
+          tabId: tab.id,
+          source: 'popup_paper'
+        });
+      }
     } else {
-      // URL-based import (for non-PDF pages)
+      // URL-based import (no local bytes) — the background asks the server to
+      // download and ingest the PDF, then broadcasts pdfReady with the tabId.
       try {
         await chrome.runtime.sendMessage({
-          action: 'triggerPDFAnalysis',
+          action: 'proxyAnalyzeStream',
+          url: tab.url,
           tabId: tab.id,
-          options: { forceUrl: true }
+          source: 'popup_url'
         });
       } catch (err) {
-        console.error('Trigger analysis failed:', err);
+        console.error('URL import trigger failed:', err);
       }
     }
 
@@ -175,7 +198,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('import-page-btn')?.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) triggerImport(tab, 'url').catch(err => {
+    if (tab) triggerImport(tab, 'paper').catch(err => {
       document.getElementById('error-message').textContent = err.message;
       show('error');
     });
@@ -262,8 +285,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       });
     } else if (status.type === 'importable') {
+      detectedMeta = status.status || null;
       show('importable');
       document.getElementById('importable-title').textContent = displayName(status.status.url, status.status.title);
+      // If a PDF is available for this page, present it as a download/import action.
+      const btn = document.getElementById('import-page-btn');
+      if (btn) btn.textContent = status.status.pdfAvailable ? '⬇ Download & Import PDF' : 'Analyze Page Content';
     } else {
       show('noPdf');
     }

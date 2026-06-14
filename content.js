@@ -281,6 +281,122 @@ async function isPDFPage() {
   return { isPDF: finalResult, source: 'browser', canAccess: finalCanAccess };
 }
 
+// ---------------------------------------------------------------------------
+// Paper landing-page detection (journal pages, SSRN, arXiv, NBER, RePEc, …).
+// Reads the standard scholarly <meta> tags (citation_*, DC, og) that publishers
+// embed — the same signals Google Scholar uses to show its PDF button.
+// ---------------------------------------------------------------------------
+function _meta(names) {
+  for (const n of names) {
+    const el = document.querySelector(`meta[name="${n}"]`) ||
+               document.querySelector(`meta[property="${n}"]`) ||
+               document.querySelector(`meta[name="${n.toUpperCase()}"]`);
+    if (el && el.content && el.content.trim()) return el.content.trim();
+  }
+  return null;
+}
+
+function _absUrl(u) {
+  try { return u ? new URL(u, window.location.href).href : null; } catch (_) { return u || null; }
+}
+
+// Build an ordered, de-duplicated list of candidate PDF URLs for this page.
+// Crucial for paywalled journals where citation_pdf_url is absent but the page
+// has a "Download PDF" button (e.g. SAGE/Wiley/T&F /doi/pdf/<doi>). These are
+// fetched with the user's session cookies, so an entitled user gets the PDF the
+// server can't.
+function _collectPdfCandidates(doi) {
+  const href = window.location.href;
+  const origin = window.location.origin;
+  const out = [];
+  const push = (u) => { const a = _absUrl(u); if (a && !out.includes(a)) out.push(a); };
+
+  // 1) Publisher-declared direct link.
+  push(_meta(['citation_pdf_url']));
+  const relPdf = document.querySelector('link[rel="alternate"][type="application/pdf"]');
+  if (relPdf) push(relPdf.getAttribute('href'));
+
+  // 2) On-page "Download PDF" anchors (rendered for entitled users).
+  const anchors = Array.from(document.querySelectorAll('a[href]'));
+  const pdfHrefRx = /\/doi\/(pdf|epdf|pdfdirect)\b|\/(pdf|epdf)\/|\.pdf(\?|$)|\/content\/pdf\/|\/article-pdf\//i;
+  const pdfTextRx = /\b(download|full[\s-]*text|view|get|read)\b.*\bpdf\b|\bpdf\b/i;
+  for (const a of anchors) {
+    const h = a.getAttribute('href') || '';
+    const txt = (a.textContent || '').trim().toLowerCase();
+    if (pdfHrefRx.test(h)) push(h);
+    else if (txt && txt.length < 40 && pdfTextRx.test(txt) && (h.includes('/doi/') || h.includes('pdf'))) push(h);
+  }
+
+  // 3) Derive publisher PDF URLs from the DOI / URL pattern.
+  if (doi) {
+    const d = doi;
+    if (/sagepub\.com|tandfonline\.com|journals\.uchicago\.edu|dl\.acm\.org|royalsocietypublishing\.org/i.test(href)) {
+      push(`${origin}/doi/pdf/${d}`); push(`${origin}/doi/epdf/${d}`);
+    }
+    if (/onlinelibrary\.wiley\.com/i.test(href)) {
+      push(`${origin}/doi/pdfdirect/${d}`); push(`${origin}/doi/epdf/${d}`); push(`${origin}/doi/pdf/${d}`);
+    }
+    if (/link\.springer\.com/i.test(href)) {
+      push(`https://link.springer.com/content/pdf/${d}.pdf`);
+    }
+    if (/emerald\.com/i.test(href)) {
+      push(`${origin}/insight/content/doi/${d}/full/pdf`);
+    }
+  }
+  // Generic: /doi/abs|full/<doi> → /doi/pdf|epdf/<doi> on the same host.
+  const m = href.match(/(.*\/doi)\/(?:abs|full|figure|citedby)\/(.+?)(?:[?#].*)?$/i);
+  if (m) { push(`${m[1]}/pdf/${m[2]}`); push(`${m[1]}/epdf/${m[2]}`); }
+
+  return out;
+}
+
+function detectPaperPage() {
+  const href = window.location.href;
+  const low = href.toLowerCase();
+
+  const citationTitle = _meta(['citation_title', 'dc.title', 'og:title']);
+  let doi = _meta(['citation_doi', 'dc.identifier', 'prism.doi']);
+  if (doi) doi = doi.replace(/^doi:/i, '').trim();
+  if (!doi) {
+    const m = href.match(/10\.\d{4,9}\/[^\s?&#]+/);
+    if (m) doi = m[0];
+  }
+
+  // Host-specific helpers / direct PDF derivation.
+  const isSSRN = low.includes('ssrn.com') && (low.includes('abstract_id=') || low.includes('abstract=') || /\/abstract=\d+/.test(low));
+  const arxivAbs = href.match(/arxiv\.org\/abs\/([^\s?&#]+)/i);
+  const isArxiv = !!arxivAbs;
+
+  const pdfCandidates = _collectPdfCandidates(doi);
+  if (isArxiv) pdfCandidates.push(`https://arxiv.org/pdf/${arxivAbs[1]}`);
+  let pdfUrl = pdfCandidates[0] || null;
+
+  const knownHost = isSSRN || isArxiv ||
+    /nber\.org\/papers|ideas\.repec\.org|econpapers\.repec\.org|sciencedirect\.com|link\.springer\.com|onlinelibrary\.wiley\.com|jstor\.org|academic\.oup\.com|cambridge\.org\/core|aeaweb\.org|tandfonline\.com|journals\.uchicago\.edu|emerald\.com|mdpi\.com|nature\.com|dl\.acm\.org/.test(low);
+
+  const hasAbstract = !!(document.querySelector('.abstract-text') ||
+                         document.querySelector('[data-test-id="abstract"]') ||
+                         document.querySelector('.abstract') ||
+                         document.querySelector('#abstract'));
+
+  const isImportable = !!pdfUrl || !!citationTitle || !!doi || knownHost || hasAbstract;
+  // A PDF is considered "available" if we have a direct link or enough to resolve one.
+  const pdfAvailable = !!pdfUrl || !!doi || !!citationTitle || isSSRN || isArxiv;
+
+  const type = isSSRN ? 'ssrn' : (isArxiv ? 'arxiv' : (knownHost ? 'journal' : (hasAbstract ? 'article' : 'unknown')));
+  const title = citationTitle || document.title;  // display title (may be the tab title)
+
+  // `citationTitle` is the publisher-declared paper title — the only title
+  // trustworthy enough to verify a *searched* PDF against. document.title is
+  // not sent for verification (it's often the journal/site name).
+  const result = { isImportable, pdfAvailable, type, url: href,
+                   pdfUrl: pdfUrl || null, pdfCandidates,
+                   doi: doi || null,
+                   title, citationTitle: citationTitle || null };
+  console.log('[Content Script] Paper page detection:', result);
+  return result;
+}
+
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('Content script received message:', request);
@@ -424,31 +540,62 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'checkImportableStatus') {
     (async () => {
       try {
-        const url = window.location.href.toLowerCase();
-        const isSSRN = url.includes('ssrn.com') && (url.includes('abstract_id=') || url.includes('abstract='));
-        const isArxiv = url.includes('arxiv.org/abs/');
-        
-        // Generic research page detection
-        const hasAbstract = !!(document.querySelector('.abstract-text') || 
-                               document.querySelector('[data-test-id="abstract"]') ||
-                               document.querySelector('.abstract') ||
-                               document.querySelector('#abstract'));
-        
-        const isImportable = isSSRN || isArxiv || hasAbstract;
-        const type = isSSRN ? 'ssrn' : (isArxiv ? 'arxiv' : (hasAbstract ? 'article' : 'unknown'));
-        
-        console.log('[Content Script] Importable status check:', { isImportable, type, url });
-        
-        sendResponse({ 
-          isImportable: isImportable,
-          type: type,
-          url: window.location.href,
-          title: document.title
-        });
+        sendResponse(detectPaperPage());
       } catch (error) {
         console.error('[Content Script] Error in importable status check:', error);
         sendResponse({ isImportable: false, error: error.message });
       }
+    })();
+    return true;
+  }
+
+  // Import a detected paper landing page. Prefer fetching the PDF with the
+  // user's own session cookies (gets past paywalls the backend can't reach);
+  // fall back to letting the backend resolve & download from url/doi/title.
+  if (request.action === 'importDetectedPaper') {
+    (async () => {
+      const meta = request.meta || detectPaperPage();
+      const landing = meta.url || window.location.href;
+      let fileContent = null;
+
+      // Try each candidate PDF link with the user's session cookies, stopping at
+      // the first that returns real PDF bytes (entitled paywalled download).
+      const candidates = (meta.pdfCandidates && meta.pdfCandidates.length)
+        ? meta.pdfCandidates
+        : (meta.pdfUrl ? [meta.pdfUrl] : []);
+      for (const cand of candidates) {
+        try {
+          const res = await fetch(cand, { credentials: 'include' });
+          if (!res.ok) continue;
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (ct && !(ct.includes('pdf') || ct.includes('octet-stream'))) continue; // HTML login page, etc.
+          const buf = await res.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          // Verify it really is a PDF (some paywalls serve an HTML login page with 200).
+          if (bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            fileContent = btoa(binary);
+            console.log('[Content Script] Fetched PDF with session cookies from', cand, '—', bytes.length, 'bytes');
+            break;
+          }
+        } catch (e) {
+          console.log('[Content Script] Cookie-aware PDF fetch failed for', cand, '-', e.message);
+        }
+      }
+
+      chrome.runtime.sendMessage({
+        action: 'proxyAnalyzeStream',
+        file_content: fileContent,
+        url: landing,
+        pdf_url: meta.pdfUrl || null,
+        doi: meta.doi || null,
+        // Only the trusted publisher title is sent for backend verification.
+        title: meta.citationTitle || null,
+        source: 'browser_extension_paper_page'
+      }, () => {});
+
+      sendResponse({ started: true, hadBytes: !!fileContent });
     })();
     return true;
   }
