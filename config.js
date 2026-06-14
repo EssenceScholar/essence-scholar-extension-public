@@ -2,16 +2,29 @@
 const CONFIG = {
   // Backend configuration with priority order
   BACKENDS: {
-    LOCAL_DEV: {
-      url: 'http://localhost:8080',
-      name: 'Local Development',
+    // TEMPORARY: nightly is preferred while testing the new /ingest flow.
+    NIGHTLY: {
+      url: 'https://nightly-api.essencescholar.com',
+      name: 'Nightly (testing)',
       priority: 1,
       enabled: true
     },
+    LOCAL_DEV: {
+      url: 'http://localhost:8080',
+      name: 'Local Development',
+      priority: 2,
+      enabled: true
+    },
+    SELF_HOSTED: {
+      url: 'https://scholar-api.essencescholar.com',
+      name: 'Self-Hosted (always-on)',
+      priority: 3,
+      enabled: true
+    },
     CLOUD_RUN: {
-      url: 'https://ssrn-summarizer-backend-v1-8-0-pisqy7uvxq-uc.a.run.app',
+      url: 'https://ssrn-summarizer-backend-pisqy7uvxq-uc.a.run.app',
       name: 'Cloud Run',
-      priority: 1,
+      priority: 4,
       enabled: true
     }
   },
@@ -27,13 +40,14 @@ const CONFIG = {
   AUTHOR_DATA_ENDPOINT: '/authors',
   ALL_AUTHOR_DATA_ENDPOINT: '/authors/all',
   ANALYZE_STREAM_ENDPOINT: '/analyze-stream',
+  INGEST_ENDPOINT: '/ingest', // Lightweight two-phase ingest — fast paperID, OCR in background
   
   // Timeouts
   REQUEST_TIMEOUT: 60000, // 60 seconds for local (increased from 10)
   CLOUD_REQUEST_TIMEOUT: 120000, // 120 seconds for cloud (increased from 30)
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 second
-  HEALTH_CHECK_TIMEOUT: 1000, // 1 second for health checks (reduced for faster detection)
+  HEALTH_CHECK_TIMEOUT: 3000, // 3s — tunnel-backed hosts (nightly/self-hosted) can be slow to first byte on cold start
   
   // Analysis settings
   MAX_CONTENT_LENGTH: 50000, // characters

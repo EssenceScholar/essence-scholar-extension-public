@@ -2,16 +2,29 @@
 const CONFIG = {
   // Backend configuration with priority order
   BACKENDS: {
-    LOCAL_DEV: {
-      url: 'http://localhost:8080',
-      name: 'Local Development',
+    // TEMPORARY: nightly is preferred while testing the new /ingest flow.
+    NIGHTLY: {
+      url: 'https://nightly-api.essencescholar.com',
+      name: 'Nightly (testing)',
       priority: 1,
       enabled: true
     },
-    CLOUD_RUN: {
-      url: 'https://ssrn-summarizer-backend-v1-8-0-pisqy7uvxq-uc.a.run.app',
-      name: 'Cloud Run',
+    LOCAL_DEV: {
+      url: 'http://localhost:8080',
+      name: 'Local Development',
       priority: 2,
+      enabled: true
+    },
+    SELF_HOSTED: {
+      url: 'https://scholar-api.essencescholar.com',
+      name: 'Self-Hosted (always-on)',
+      priority: 3,
+      enabled: true
+    },
+    CLOUD_RUN: {
+      url: 'https://ssrn-summarizer-backend-pisqy7uvxq-uc.a.run.app',
+      name: 'Cloud Run',
+      priority: 4,
       enabled: true
     }
   },
@@ -27,13 +40,14 @@ const CONFIG = {
   AUTHOR_DATA_ENDPOINT: '/authors',
   ALL_AUTHOR_DATA_ENDPOINT: '/authors/all',
   ANALYZE_STREAM_ENDPOINT: '/analyze-stream',
-  
+  INGEST_ENDPOINT: '/ingest', // Lightweight two-phase ingest — fast paperID, OCR in background
+
   // Timeouts
   REQUEST_TIMEOUT: 60000, // 60 seconds for local
   CLOUD_REQUEST_TIMEOUT: 120000, // 120 seconds for cloud
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 second
-  HEALTH_CHECK_TIMEOUT: 1000, // 1 second for health checks
+  HEALTH_CHECK_TIMEOUT: 3000, // 3s — tunnel-backed hosts (nightly/self-hosted) can be slow to first byte on cold start
   
   // Analysis settings
   MAX_CONTENT_LENGTH: 50000, // characters
@@ -467,6 +481,8 @@ if (chrome.webRequest && chrome.webRequest.onHeadersReceived) {
 // Clean up PDF detection state on tab removal
 chrome.tabs.onRemoved.addListener(tabId => {
   pdfDetectionState.delete(tabId);
+  try { activeTabs.delete(tabId); } catch (_) {}
+  try { chrome.storage.local.remove(`tabResult_${tabId}`); } catch (_) {}
   console.log('[BG PDF] Cleaned up PDF state for tab:', tabId);
 });
 
@@ -475,6 +491,8 @@ if (chrome.webNavigation && chrome.webNavigation.onBeforeNavigate) {
   chrome.webNavigation.onBeforeNavigate.addListener(details => {
     if (details.frameId === 0) {
       pdfDetectionState.delete(details.tabId);
+      try { activeTabs.delete(details.tabId); } catch (_) {}
+      try { chrome.storage.local.remove(`tabResult_${details.tabId}`); } catch (_) {}
       console.log('[BG PDF] Cleared PDF state on navigation for tab:', details.tabId);
     }
   });
@@ -696,6 +714,32 @@ let pdfTabs = new Set(); // Track tabs with PDF content
 // Analysis monitoring state
 let activeMonitors = new Map();
 let monitoringIntervals = new Map();
+
+// Persist per-tab ingest result to both memory and chrome.storage so the popup
+// can render the correct state even after the MV3 service worker is evicted
+// (which wipes activeTabs). Keyed by tab id.
+const TAB_RESULT_PREFIX = 'tabResult_';
+
+async function setTabResult(tabId, patch) {
+  if (tabId == null) return;
+  const prev = activeTabs.get(tabId) || {};
+  const next = { ...prev, ...patch, lastUpdated: Date.now() };
+  activeTabs.set(tabId, next);
+  try {
+    await chrome.storage.local.set({ [`${TAB_RESULT_PREFIX}${tabId}`]: next });
+  } catch (_) {}
+}
+
+async function getTabResult(tabId) {
+  if (tabId == null) return null;
+  if (activeTabs.has(tabId)) return activeTabs.get(tabId);
+  try {
+    const r = await chrome.storage.local.get([`${TAB_RESULT_PREFIX}${tabId}`]);
+    return r[`${TAB_RESULT_PREFIX}${tabId}`] || null;
+  } catch (_) {
+    return null;
+  }
+}
 
 // Persist monitoring state to chrome.storage
 async function persistMonitoringState() {
@@ -1518,28 +1562,32 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'checkPDFStatus') {
     const tabId = request.tabId || sender.tab?.id;
     const pdfInfo = pdfDetectionState.get(tabId);
-    const tabState = activeTabs.get(tabId);
 
-    if (pdfInfo) {
-      sendResponse({
-        isPDF: true,
-        url: pdfInfo.url,
-        contentType: pdfInfo.contentType,
-        method: 'background-cache',
-        pdfReady: tabState?.pdfReady || false,
-        paperId: tabState?.paperId || null,
-        analysisInProgress: tabState?.analysisInProgress || false,
-        analysisError: tabState?.analysisError || null
-      });
-    } else {
-      sendResponse({ 
-        isPDF: false,
-        analysisInProgress: tabState?.analysisInProgress || false,
-        analysisError: tabState?.analysisError || null,
-        pdfReady: tabState?.pdfReady || false,
-        paperId: tabState?.paperId || null
-      });
-    }
+    // Read persisted tab result so a reopened popup (or an evicted SW) still
+    // reflects a completed/in-progress import.
+    (async () => {
+      const tabState = (await getTabResult(tabId)) || {};
+      if (pdfInfo) {
+        sendResponse({
+          isPDF: true,
+          url: pdfInfo.url,
+          contentType: pdfInfo.contentType,
+          method: 'background-cache',
+          pdfReady: tabState.pdfReady || false,
+          paperId: tabState.paperId || null,
+          analysisInProgress: tabState.analysisInProgress || false,
+          analysisError: tabState.analysisError || null
+        });
+      } else {
+        sendResponse({
+          isPDF: false,
+          analysisInProgress: tabState.analysisInProgress || false,
+          analysisError: tabState.analysisError || null,
+          pdfReady: tabState.pdfReady || false,
+          paperId: tabState.paperId || null
+        });
+      }
+    })();
     return true;
   }
   
@@ -1634,85 +1682,87 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === 'proxyAnalyzeStream') {
-    let { file_content, url, source } = request;
-    const tabId = sender.tab?.id;
-    
+  if (request.action === 'proxyAnalyzeStream' || request.action === 'proxyIngest') {
+    let { file_content, url, source, pdf_url, doi, title } = request;
+    // sender.tab is set when the message comes from the content-script collector;
+    // popup-initiated (URL) imports pass request.tabId explicitly.
+    const tabId = sender.tab?.id ?? request.tabId ?? null;
+
     (async () => {
       try {
-        console.log('[BG Proxy] Starting proxy analysis for:', url);
+        console.log('[BG Ingest] Starting lightweight ingest for:', url);
 
-        // If we don't have file_content and it's a local file, try to fetch it here in the background
-        // Service workers often have better success reading file:// than content scripts in PDF viewers
+        // If we don't have bytes and it's a local file, try fetching here in the
+        // background — service workers read file:// more reliably than content scripts.
         if (!file_content && url && url.startsWith('file://')) {
           try {
-            console.log('[BG Proxy] Attempting background fetch for local file:', url);
             file_content = await fetchPdfBytesToBase64(url);
-            console.log('[BG Proxy] Background fetch successful, size:', file_content.length);
+            console.log('[BG Ingest] Background file fetch ok, size:', file_content.length);
           } catch (fetchErr) {
-            console.error('[BG Proxy] Background fetch failed:', fetchErr.message);
-            // If background fetch also fails, we can't proceed with local files
-            throw new Error(`Could not read local file. Please ensure "Allow access to file URLs" is enabled in chrome://extensions and RELOAD the page.`);
+            throw new Error('Could not read local file. Enable "Allow access to file URLs" in chrome://extensions and reload the page.');
           }
         }
 
+        // Mark this tab as importing so a reopened popup shows progress.
+        if (tabId != null) await setTabResult(tabId, { analysisInProgress: true, pdfReady: false, paperId: null, url });
+
         const backend = await ServiceWorkerBackendManager.getCurrentBackend();
-        const llmSettings = (await chrome.storage.local.get(['llmSettings'])).llmSettings || { model: 'gemini' };
-        
-        const response = await makeApiRequestWithBackend(CONFIG.ANALYZE_STREAM_ENDPOINT, {
+
+        // Lightweight ingest: returns a paper_id fast; full OCR continues server-side.
+        const response = await makeApiRequestWithBackend(CONFIG.INGEST_ENDPOINT, {
           method: 'POST',
           body: JSON.stringify({
-            file_content,
-            content: { paperUrl: url },
-            model: llmSettings.model,
-            source: source || 'browser_extension_proxy'
+            file_content: file_content || null,
+            url: url || null,
+            pdf_url: pdf_url || null,
+            doi: doi || null,
+            title: title || null,
+            source: source || 'browser_extension'
           })
         }, backend);
-        
+
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[BG Proxy] Backend error:', response.status, errorText);
+          let errorText = '';
+          try { errorText = await response.text(); } catch (_) {}
+          console.error('[BG Ingest] Backend error:', response.status, errorText);
+          if (tabId != null) await setTabResult(tabId, { analysisInProgress: false, analysisError: `Backend error ${response.status}` });
+          if (tabId != null) chrome.runtime.sendMessage({ action: 'analysisError', tabId, error: `Backend error ${response.status}` }).catch(() => {});
           sendResponse({ success: false, error: `Backend error ${response.status}` });
           return;
         }
 
-        // Parse SSE stream to find paper_id
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let paperId = null;
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const eventData = JSON.parse(line.substring(6));
-                // Extract paper_id from any event that has it
-                if (eventData.paper_id) {
-                  paperId = eventData.paper_id;
-                } else if (eventData.analysis_id && !paperId) {
-                  paperId = eventData.analysis_id;
-                }
-                
-                // Log progress if available
-                if (eventData.status && eventData.message) {
-                  console.log(`[BG Proxy] Status: ${eventData.status} - ${eventData.message} (paperId: ${paperId})`);
-                }
-              } catch (e) {}
-            }
-          }
-          // Do NOT break here - wait for the stream to complete to ensure the digest is ready
+        const result = await response.json();
+        const paperId = result.paper_id || null;
+        console.log('[BG Ingest] Ingest complete, paperId:', paperId, 'status:', result.status);
+
+        // Persist result so the popup can complete even if it was closed/reopened.
+        if (tabId != null) {
+          await setTabResult(tabId, {
+            analysisInProgress: false,
+            pdfReady: true,
+            paperId,
+            url,
+            title: result.title || null
+          });
         }
-        
-        console.log('[BG Proxy] Analysis stream complete, final paperId:', paperId);
+
+        // Broadcast the contract the popup waits for.
+        chrome.runtime.sendMessage({
+          action: 'pdfReady',
+          tabId,
+          paperId,
+          pdf: { url, paperId }
+        }).catch(() => {});
+
+        chrome.action.setBadgeText({ text: '✓' });
+        chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+
         sendResponse({ success: true, paperId });
       } catch (error) {
         const errorMsg = error.message || error.toString() || 'Unknown background error';
-        console.error('[BG Proxy] Error:', errorMsg);
+        console.error('[BG Ingest] Error:', errorMsg);
+        if (tabId != null) await setTabResult(tabId, { analysisInProgress: false, analysisError: errorMsg });
+        if (tabId != null) chrome.runtime.sendMessage({ action: 'analysisError', tabId, error: errorMsg }).catch(() => {});
         sendResponse({ success: false, error: errorMsg });
       }
     })();

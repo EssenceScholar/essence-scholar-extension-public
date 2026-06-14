@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Essence Scholar",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Import academic PDFs into your Essence Scholar library with one click. Automatically detects PDFs as you browse.",
   "permissions": [
     "activeTab",
