@@ -80,7 +80,7 @@ body {
   font-size: 22px;
 }
 
-.state-icon.blue   { background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%); }
+.state-icon.blue   { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); }
 .state-icon.muted  { background: #f1f5f9; }
 .state-icon.green  { background: #d1fae5; }
 .state-icon.yellow { background: #fef3c7; }
@@ -109,7 +109,7 @@ body {
   padding: 11px 16px;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, #0ea5e9 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
   color: white;
   font-size: 14px;
   font-weight: 600;
