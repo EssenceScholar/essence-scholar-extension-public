@@ -19,7 +19,7 @@
 // reader just asked for. Two messages over `window.postMessage`, on the app's
 // own pages only:
 //
-//   app  → extension   { type: 'arm-capture', ssrn_id, title }
+//   app  → extension   { type: 'arm-capture', ssrn_id, title, doi }
 //   extension → app    { type: 'armed' | 'extension-here', version }
 //
 // and the marker attribute below, which the app reads synchronously to tell
@@ -84,7 +84,7 @@
     if (d.type !== 'arm-capture') return;
     try {
       chrome.runtime.sendMessage(
-        { action: 'armCapture', ssrn_id: String(d.ssrn_id || ''), title: String(d.title || '') },
+        { action: 'armCapture', ssrn_id: String(d.ssrn_id || ''), title: String(d.title || ''), doi: String(d.doi || '') },
         () => {
           // A dead service worker rejects here; the app falls back to the
           // extension's own ask-notification, which still imports the paper.

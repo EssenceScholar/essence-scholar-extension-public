@@ -1523,7 +1523,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   // The web app's "Download & import" — consent for ONE paper, before the fact.
   if (request.action === 'armCapture') {
-    _armCapture(request.ssrn_id, request.title).then(ok => sendResponse({ armed: ok }));
+    _armCapture(request.ssrn_id, request.title, request.doi).then(ok => sendResponse({ armed: ok }));
     return true;
   }
   // "Read these SSRN pages in my browser" — the app's own button. Arms exactly
@@ -2083,17 +2083,20 @@ async function _armedCaptures() {
   }
 }
 
-async function _armCapture(ssrnId, title) {
+async function _armCapture(ssrnId, title, doi) {
   const armed = await _armedCaptures();
   const key = String(ssrnId || '').trim();
   const name = String(title || '').trim().slice(0, 300);
-  // Matching is by SSRN id — it is the only identifier both sides share, since
-  // SSRN's own filename is `SSRN-idNNNNNNN.pdf` and carries no title. An arm
-  // without one could never fire, so it is refused rather than stored: the app
+  const id = String(doi || '').trim().toLowerCase();
+  // Matching is by SSRN id, or by DOI for a paper the reader opens via their
+  // library (Settings → Connected access): Wiley/Springer/OUP download URLs
+  // carry the DOI; ScienceDirect's do not, so a library download that arrives
+  // within minutes of a DOI arm is matched as that arm (see _matchArmed). An arm
+  // with neither could never fire, so it is refused rather than stored: the app
   // then knows to leave the reader with the ordinary consent notification.
-  if (!key) return false;
-  const kept = armed.filter(a => a.ssrn_id !== key || !key);
-  kept.push({ ssrn_id: key, title: name, at: Date.now() });
+  if (!key && !id) return false;
+  const kept = armed.filter(a => (key ? a.ssrn_id !== key : true) && (id ? a.doi !== id : true));
+  kept.push({ ssrn_id: key, doi: id, title: name, at: Date.now() });
   try {
     await chrome.storage.local.set({ armed_captures: kept.slice(-20) });
     console.log('[BG Downloads] armed for', key || name);
@@ -2109,15 +2112,33 @@ async function _matchArmed(item) {
   const armed = await _armedCaptures();
   if (!armed.length) return null;
   const sid = _abstractIdFromUrl(item.url) || _abstractIdFromUrl(item.referrer);
-  if (!sid) return null;
-  return armed.find(a => a.ssrn_id && a.ssrn_id === String(sid)) || null;
+  if (sid) {
+    const bySsrn = armed.find(a => a.ssrn_id && a.ssrn_id === String(sid));
+    if (bySsrn) return bySsrn;
+  }
+  // A library / publisher download: the DOI in the url or referrer names the arm
+  // exactly; ScienceDirect (pii urls) carries none, so the ONE armed DOI record
+  // still fresh from the last ten minutes is taken to be it — the reader pressed
+  // 'open via your library' on that paper minutes ago, and the server then
+  // matches on title as well before it files anything.
+  const hay = `${item.url || ''} ${item.referrer || ''}`.toLowerCase();
+  const byDoi = armed.find(a => a.doi && hay.includes(a.doi));
+  if (byDoi) return byDoi;
+  const src = typeof captureSourceKeyFor === 'function' ? captureSourceKeyFor(item) : null;
+  if (src && src !== 'ssrn') {
+    const fresh = armed.filter(a => a.doi && (Date.now() - (a.at || 0)) < 10 * 60 * 1000);
+    if (fresh.length === 1) return fresh[0];
+  }
+  return null;
 }
 
 async function _disarm(record) {
   try {
     const armed = await _armedCaptures();
     await chrome.storage.local.set({
-      armed_captures: armed.filter(a => a !== record && a.ssrn_id !== record.ssrn_id),
+      armed_captures: armed.filter(a => a !== record
+        && !(record.ssrn_id && a.ssrn_id === record.ssrn_id)
+        && !(record.doi && a.doi === record.doi)),
     });
   } catch (_) { /* the TTL clears it anyway */ }
 }
@@ -2357,7 +2378,7 @@ async function _browseCapture(msg, sender) {
 chrome.tabs.onRemoved.addListener((tabId) => { void _forgetBrowseTab(tabId); });
 
 
-async function _ingestDownloadItem(item) {
+async function _ingestDownloadItem(item, armed) {
   try {
         console.log('[BG Downloads] importing PDF download:', item.url);
 
@@ -2420,8 +2441,11 @@ async function _ingestDownloadItem(item) {
             file_content,
             url: abstractUrl,
             pdf_url: item.url,
-            title: null,
-            doi: null,
+            // From the armed record when the app asked for this paper by name:
+            // the server then resolves the parked request by DOI, not by guessing
+            // a title out of the PDF.
+            title: (armed && armed.title) || null,
+            doi: (armed && armed.doi) || null,
             source: 'download_capture',
           }),
         }, backend);
@@ -2453,8 +2477,16 @@ async function _ingestDownloadItem(item) {
         setTimeout(() => chrome.action.setBadgeText({ text: '' }), 4000);
   } catch (e) {
     // Never throw out of the capture path; a failed import must not break the
-    // browser's own download handling.
+    // browser's own download handling. But it must not be SILENT either: the red
+    // badge above is set inside the try, after response.ok, so a throw skipped it
+    // and a brand-new user who never connected an account clicked "Import", got a
+    // 401, and saw nothing happen at all. Same badge, same 4s, on this path too.
     console.warn('[BG Downloads] could not ingest download:', e && e.message);
+    try {
+      chrome.action.setBadgeText({ text: '!' });
+      chrome.action.setBadgeBackgroundColor({ color: '#F44336' });
+      setTimeout(() => chrome.action.setBadgeText({ text: '' }), 4000);
+    } catch (_) { /* no action surface (rare); the console line still stands */ }
     _ingestedDownloadIds.delete(item.id);   // allow a retry on a later attempt
   }
 }
@@ -2568,9 +2600,9 @@ if (chrome.downloads && chrome.downloads.onChanged) {
         // the reader presses one button in the app and the paper appears.
         const armed = await _matchArmed(item);
         if (armed) {
-          console.log('[BG Downloads] armed import (asked for in the app):', armed.ssrn_id);
+          console.log('[BG Downloads] armed import (asked for in the app):', armed.ssrn_id || armed.doi);
           await _disarm(armed);
-          await _ingestDownloadItem(item);
+          await _ingestDownloadItem(item, armed);
           return;
         }
         if (mode === 'ask') {
