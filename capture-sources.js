@@ -11,7 +11,10 @@
 // the extension settings (stored as {download_capture_sources: {key: false}}).
 const CAPTURE_SOURCES = [
   { key: 'ssrn',          label: 'SSRN',                         pattern: 'ssrn\\.com|Delivery\\.cfm', unstableServerFetch: true },
-  { key: 'nber',          label: 'NBER',                         pattern: 'nber\\.org' },
+  // unstableServerFetch, added 2026-09-10: NBER caps how many PDFs one reader may
+  // download. A server-side fetch either trips that cap or spends it invisibly, so
+  // the popup steers the reader to download it themselves and imports the file.
+  { key: 'nber',          label: 'NBER',                         pattern: 'nber\\.org', unstableServerFetch: true },
   { key: 'arxiv',         label: 'arXiv',                        pattern: 'arxiv\\.org' },
   { key: 'repec',         label: 'RePEc / EconPapers / EconStor', pattern: 'repec\\.org|econpapers|econstor' },
   { key: 'elsevier',      label: 'ScienceDirect (Elsevier)',     pattern: 'sciencedirect[.-]com' },

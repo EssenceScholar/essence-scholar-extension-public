@@ -206,12 +206,21 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-// Also expose a simple ping handler for compatibility
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === 'ping') {
-    sendResponse({ status: 'ok', type: 'pdf-collector' });
-    return true;
-  }
-});
+// NO ping handler here, deliberately.
+//
+// `{action:'ping'}` is sent from exactly two places, both inside
+// enhanced-pdf-handler.js `ensureContentScriptWithRetry`, and both exist for one
+// purpose: to ask "is content.js already in this tab?". This file is a DECLARED
+// content script on <all_urls>, so it is on the page first and its listener won
+// the race to sendResponse every time — the probe was answered "already injected"
+// on every page, content.js was therefore never injected anywhere, and every
+// `checkImportableStatus` from popup.js hit a tab with no listener for it. The
+// popup showed "No PDF on This Page" on every SSRN/arXiv/publisher landing page
+// since 1.6.1, and the download-first steer for unstable sources was unreachable.
+//
+// Answering with a `type` the caller could filter on does NOT fix it: this
+// listener also wins the post-injection VERIFY ping, so verification would fail
+// and the retry loop would re-inject content.js, which throws on re-entry. The
+// probe simply must not be answered by this file.
 
 console.log('[PDF-collector] Content script loaded on:', location.href);
