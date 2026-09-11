@@ -28,7 +28,7 @@ const CONFIG = {
       enabled: true
     },
     CLOUD_RUN: {
-      url: 'https://ssrn-summarizer-backend-pisqy7uvxq-uc.a.run.app',
+      url: 'https://essence-scholar-backend-pisqy7uvxq-ez.a.run.app',
       name: 'Cloud Run',
       priority: 2,
       enabled: true
@@ -1532,6 +1532,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     _armBrowse(request.targets).then(sendResponse);
     return true;
   }
+  // ssrn-download.js: "did the reader ask for this paper?" — armed in the app, or
+  // waiting in their download queue on the backend (asked for in the chat or an
+  // MCP client). Yes arms the capture and the script presses Download.
+  if (request.action === 'attendedDownloadFor') {
+    _attendedDownloadFor(request.url, request.ssrn_id).then(sendResponse);
+    return true;
+  }
+  if (request.action === 'attendedDownloadStatus') {
+    console.log('[BG Downloads] attended', request.phase, 'for', request.ssrn_id, request.href || '');
+    sendResponse({ ok: true });
+    return true;
+  }
   if (request.action === 'browseArmedFor') {
     _browseArmedFor(request.url).then(sendResponse);
     return true;
@@ -2292,6 +2304,40 @@ async function _armBrowse(targets) {
     }
   }
   return { armed: wanted.length, opened };
+}
+
+// ── Attended download — the extension presses Download for a paper the reader asked for ──
+// Owner, 2026-09-11: "why it doesnt know that extention will do such a work! it
+// should be able to open in browser click download and then the extention will
+// digest". Consent is the request itself: a parked row in the reader's own queue
+// (POST /fetch-queue, made by the app, the chat or an MCP client on their behalf)
+// names this SSRN id, so the page that carries it may be pressed. The answer arms
+// the capture exactly as the app's own "Download & import" button does, and the
+// completed download then imports without a second consent step. Nothing here
+// widens what is captured: an SSRN page nobody asked for is answered `armed:false`
+// and never touched. One GET per abstract page, listing only the reader's own queue.
+async function _attendedDownloadFor(url, ssrnId) {
+  const sid = String(ssrnId || _abstractIdFromUrl(url) || '').trim();
+  if (!sid) return { armed: false };
+  try {
+    const local = (await _armedCaptures()).find(a => a.ssrn_id === sid);
+    if (local) return { armed: true, title: local.title || '', via: 'app' };
+    const backend = await ServiceWorkerBackendManager.getCurrentBackend();
+    if (!backend) return { armed: false };
+    const res = await makeApiRequestWithBackend('/fetch-queue', { method: 'GET' }, backend);
+    if (!res.ok) return { armed: false };
+    const body = await res.json().catch(() => ({}));
+    const pending = Array.isArray(body.pending) ? body.pending : [];
+    const hit = pending.find(r => r && (String(r.ssrn_id || '') === sid
+      || (Array.isArray(r.sources) && r.sources.some(s => _abstractIdFromUrl((s && s.url) || '') === sid))));
+    if (!hit) return { armed: false };
+    await _armCapture(sid, hit.title || '', hit.doi || '');
+    console.log('[BG Downloads] attended: queue request', hit.id, 'names', sid, '— pressing Download');
+    return { armed: true, title: hit.title || '', via: 'queue', request_id: hit.id };
+  } catch (e) {
+    console.log('[BG Downloads] attended check failed:', e && e.message);
+    return { armed: false };
+  }
 }
 
 async function _browseArmedFor(url) {

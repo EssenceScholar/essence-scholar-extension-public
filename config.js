@@ -25,8 +25,12 @@ const CONFIG = {
       enabled: true
     },
     CLOUD_RUN: {
-      url: 'https://ssrn-summarizer-backend-pisqy7uvxq-uc.a.run.app',
-      name: 'Cloud Run',
+      // The COLD STANDBY the deploy script refreshes (europe-west4, same Neon DB as
+      // the always-on host, current code). The url this held until 1.9.10 was the
+      // retired us-central1 service — still answering /health, still on the same
+      // database, but running months-old code with none of today's routes.
+      url: 'https://essence-scholar-backend-pisqy7uvxq-ez.a.run.app',
+      name: 'Cloud Run (standby)',
       priority: 4,
       enabled: true
     }

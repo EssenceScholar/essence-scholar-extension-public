@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Essence Scholar",
-  "version": "1.9.9",
+  "version": "1.9.10",
   "description": "Import academic PDFs into your Essence Scholar library with one click. Automatically detects PDFs as you browse or download.",
   "permissions": [
     "activeTab",
@@ -43,7 +43,8 @@
     {
       "id": "ssrn-browse",
       "js": [
-        "ssrn-browse.js"
+        "ssrn-browse.js",
+        "ssrn-download.js"
       ],
       "matches": [
         "https://papers.ssrn.com/*",
