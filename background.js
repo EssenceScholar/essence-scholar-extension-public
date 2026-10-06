@@ -697,6 +697,17 @@ async function fetchPdfBytesToBase64(url) {
   if (!res.ok) throw new Error(`Failed to download PDF: ${res.status}`);
   const buf = await res.arrayBuffer();
   const bytes = new Uint8Array(buf);
+  // It must actually BE a PDF. A paywall answers 200 with a login page, and a
+  // publisher's "epdf" link answers 200 with a JavaScript reader — both would
+  // otherwise be base64'd and uploaded as if they were the paper. The content
+  // script's own candidate loop has always made this check; the two places that
+  // fetch bytes should not disagree about what counts as a PDF.
+  if (!(bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50
+        && bytes[2] === 0x44 && bytes[3] === 0x46)) {
+    const kind = (res.headers.get('content-type') || 'unknown type').split(';')[0];
+    throw new Error(`That link did not return a PDF (${kind}) — it is probably a login `
+                    + `page or an online reader rather than the file`);
+  }
   let bin = '';
   const CHUNK = 0x8000;
   for (let i = 0; i < bytes.length; i += CHUNK) {
@@ -2459,10 +2470,15 @@ async function _ingestDownloadItem(item, armed) {
           try {
             file_content = await fetchPdfBytesToBase64(item.url);
           } catch (e) {
-            throw new Error(
-              `Could not read the downloaded PDF from disk, and re-downloading it failed ` +
-              `(${e && e.message}). Enable "Allow access to file URLs" for this extension ` +
-              `in chrome://extensions and download the paper again.`);
+            // Two different failures wear the same sentence otherwise. A PDF the
+            // reader OPENED was never on disk, so telling them to grant file
+            // access sends them to fix something that was never wrong.
+            throw new Error(item.openedInTab
+              ? `Could not read that PDF back from the publisher (${e && e.message}). `
+                + `Some links work only once — save the file and it will be offered again.`
+              : `Could not read the downloaded PDF from disk, and re-downloading it failed `
+                + `(${e && e.message}). Enable "Allow access to file URLs" for this extension `
+                + `in chrome://extensions and download the paper again.`);
           }
         }
 
@@ -2492,7 +2508,7 @@ async function _ingestDownloadItem(item, armed) {
             // a title out of the PDF.
             title: (armed && armed.title) || null,
             doi: (armed && armed.doi) || null,
-            source: 'download_capture',
+            source: item.openedInTab ? 'tab_pdf_capture' : 'download_capture',
           }),
         }, backend);
         if (!response.ok) {
@@ -2565,9 +2581,17 @@ async function _addPendingImport(item) {
   if (!pending.some(x => x.id === item.id)) {
     pending.push({
       id: item.id,
-      name: (item.filename || item.url || 'document.pdf').split(/[\\/]/).pop(),
+      name: (item.name || item.filename || item.url || 'document.pdf').split(/[\\/]/).pop(),
       url: item.url || '',
       ts: Date.now(),
+      // A PDF that was OPENED rather than downloaded has no download record to
+      // look up when consent arrives — Chrome never made one — so the card
+      // carries everything the import will need: where to fetch the bytes from,
+      // and who the publisher's page said this paper is.
+      openedInTab: !!item.openedInTab,
+      referrer: item.referrer || '',
+      doi: item.doi || null,
+      title: item.title || null,
     });
     while (pending.length > 10) pending.shift();
     try { await chrome.storage.local.set({ [_PENDING_IMPORTS_KEY]: pending }); } catch (_) {}
@@ -2577,6 +2601,7 @@ async function _addPendingImport(item) {
 
 async function _resolvePendingImport(downloadId, accept) {
   const pending = await _getPendingImports();
+  const record = pending.find(x => x.id === downloadId);
   try {
     await chrome.storage.local.set({
       [_PENDING_IMPORTS_KEY]: pending.filter(x => x.id !== downloadId),
@@ -2585,6 +2610,15 @@ async function _resolvePendingImport(downloadId, accept) {
   try { chrome.notifications.clear(`${_IMPORT_NOTIFICATION_PREFIX}${downloadId}`); } catch (_) {}
   await _updatePendingBadge();
   if (!accept) return { done: true, imported: false };
+  if (record && record.openedInTab) {
+    // Nothing to look up: the reader opened this one, they never saved it.
+    await _ingestDownloadItem({
+      id: record.id, url: record.url, filename: '', mime: 'application/pdf',
+      referrer: record.referrer || '', openedInTab: true,
+    }, { doi: record.doi || null, title: record.title || null });
+    await _updatePendingBadge();
+    return { done: true, imported: true };
+  }
   const [item] = await chrome.downloads.search({ id: downloadId });
   if (!item) return { done: true, imported: false, error: 'download no longer known to Chrome' };
   await _ingestDownloadItem(item);
@@ -2606,7 +2640,9 @@ function _offerImport(item) {
     iconUrl: 'icons/icon128.png',
     title: 'Import into Essence Scholar?',
     message: name,
-    contextMessage: 'Academic PDF downloaded — nothing is uploaded unless you choose Import.',
+    contextMessage: item.openedInTab
+      ? 'Academic PDF opened in a tab — nothing is uploaded unless you choose Import.'
+      : 'Academic PDF downloaded — nothing is uploaded unless you choose Import.',
     buttons: [{ title: 'Import' }, { title: 'Ignore' }],
     priority: 1,
   }, () => void chrome.runtime.lastError);   // notification may be blocked — fine
@@ -2666,3 +2702,182 @@ if (chrome.downloads && chrome.downloads.onChanged) {
   });
   console.log('[BG] Download capture active — academic-source PDFs only; default mode asks before importing');
 }
+// ═════════════════════════════════════════════════════════════════════════════
+//  PDFs that OPEN IN A TAB instead of downloading
+// ═════════════════════════════════════════════════════════════════════════════
+// Reported by the owner, 2026-09-16: "the extension detection and import is not
+// working properly for the journals; in ssrn because the id is detectable it
+// works fine, but for the journal paper I usually need to click something and
+// the paper then opens in another new tab, the extension cannot keep track."
+//
+// Both halves of that are true and they are different bugs:
+//
+//   1. NOTHING TO CAPTURE. A publisher's "View PDF" navigates a tab to the PDF,
+//      which Chrome RENDERS. No download is created, so `downloads.onChanged`
+//      — the only capture path there was — never fires. The paper is on screen
+//      and the extension is blind to it.
+//   2. NOTHING TO CAPTURE IT AS. The new tab carries the bytes and nothing else:
+//      no `citation_doi`, no `citation_title`, no landing page. SSRN escapes this
+//      because its id is in the url; a Wiley `/doi/pdfdirect/10.1111/...` often
+//      survives too, but `/article/download?id=48812` says nothing at all.
+//
+// So: notice the PDF tab, and remember where the reader came FROM. The opener is
+// the article page the content script already understands (`detectPaperPage`),
+// and asking it costs one message. Everything else — the academic-source
+// whitelist, the per-source toggles, ask/auto/off, the armed-capture shortcut —
+// is the download path's, reused exactly. This adds a trigger, never a bypass.
+
+const _TAB_PDF_RX = new RegExp(
+  '\\.pdf(\\?|#|$)'                       // …/paper.pdf
+  + '|/doi/(pdf|epdf|pdfdirect)'          // Wiley, T&F, SAGE, Chicago, INFORMS
+  + '|/content/pdf/'                      // Springer
+  + '|/article-pdf/|/article/pdf'         // OUP, BMC
+  + '|/pdf/\\d'                           // arXiv-style /pdf/2401.01234
+  + '|Delivery\\.cfm',                    // SSRN
+  'i');
+
+// tabId -> the tab that opened it. `tabs.onUpdated` does not carry an opener, so
+// it has to be recorded when the tab is born. storage.session because the
+// service worker is killed between the click and the load often enough to matter.
+const _OPENERS_KEY = 'pdf_tab_openers';
+
+async function _rememberOpener(tabId, openerTabId) {
+  if (!openerTabId) return;
+  try {
+    const o = await chrome.storage.session.get([_OPENERS_KEY]);
+    const map = o[_OPENERS_KEY] || {};
+    map[String(tabId)] = { opener: openerTabId, at: Date.now() };
+    for (const [k, v] of Object.entries(map)) {          // an hour is plenty
+      if (Date.now() - (v.at || 0) > 3600e3) delete map[k];
+    }
+    await chrome.storage.session.set({ [_OPENERS_KEY]: map });
+  } catch (_) { /* session storage is unavailable in some channels — degrade */ }
+}
+
+async function _openerOf(tabId) {
+  try {
+    const o = await chrome.storage.session.get([_OPENERS_KEY]);
+    const rec = (o[_OPENERS_KEY] || {})[String(tabId)];
+    return rec ? rec.opener : null;
+  } catch (_) { return null; }
+}
+
+if (chrome.tabs && chrome.tabs.onCreated) {
+  chrome.tabs.onCreated.addListener(tab => {
+    if (tab && tab.id && tab.openerTabId) void _rememberOpener(tab.id, tab.openerTabId);
+  });
+}
+
+/** What the article page knows about this paper: doi, title, its own url.
+ *  Best effort — a tab that was closed, or never had the content script, simply
+ *  yields nothing and the import proceeds on the pdf url alone. */
+async function _identityFromOpener(openerTabId) {
+  if (!openerTabId) return {};
+  try {
+    const meta = await chrome.tabs.sendMessage(openerTabId, { action: 'checkImportableStatus' });
+    if (!meta) return {};
+    return {
+      doi: meta.doi || null,
+      title: meta.citationTitle || null,
+      landing: meta.url || null,
+    };
+  } catch (_) {
+    return {};                       // no content script there (chrome://, pdf, closed)
+  }
+}
+
+// One import per url per window of time: a reader who opens the PDF and THEN
+// saves it must not import the same paper twice.
+const _capturedPdfUrls = new Map();
+const _TAB_CAPTURE_TTL_MS = 10 * 60 * 1000;
+
+function _alreadyCaptured(url) {
+  const now = Date.now();
+  for (const [u, at] of _capturedPdfUrls) {
+    if (now - at > _TAB_CAPTURE_TTL_MS) _capturedPdfUrls.delete(u);
+  }
+  if (_capturedPdfUrls.has(url)) return true;
+  _capturedPdfUrls.set(url, now);
+  return false;
+}
+
+let _syntheticCaptureId = -1;
+
+async function _captureOpenedPdf(tabId, url) {
+  try {
+    if (!url || !/^https?:/i.test(url)) return;
+    const opener = await _openerOf(tabId);
+    let openerUrl = '';
+    if (opener) {
+      try { openerUrl = (await chrome.tabs.get(opener)).url || ''; } catch (_) {}
+    }
+    // The whitelist reads url AND referrer, which is why the opener's url is
+    // passed as one: a CDN-hosted PDF is recognised by the page it came from.
+    const item = {
+      id: _syntheticCaptureId--,
+      url,
+      filename: '',                  // nothing on disk — this one is fetched back
+      referrer: openerUrl,
+      mime: 'application/pdf',
+      openedInTab: true,
+    };
+    if (!(await _isAcademicSource(item))) return;
+    const mode = await _downloadCaptureMode();
+    if (mode === 'off') return;                 // the reader's global switch wins
+    if (_alreadyCaptured(url)) return;
+
+    const identity = await _identityFromOpener(opener);
+    if (identity.landing) item.referrer = identity.landing;
+
+    const armed = await _matchArmed(item);
+    if (armed) {
+      console.log('[BG TabPDF] armed import (asked for in the app):', armed.doi || armed.ssrn_id);
+      await _disarm(armed);
+      await _ingestDownloadItem(item, { ...armed, ...identity });
+      return;
+    }
+    if (mode === 'ask') {
+      console.log('[BG TabPDF] consent requested for a PDF opened in a tab:', url);
+      _offerImport({ ...item, filename: identity.title || '' });
+      await _addPendingImport({ ...item, name: identity.title || '', ...identity });
+      return;
+    }
+    await _ingestDownloadItem(item, identity);   // mode === 'auto'
+  } catch (e) {
+    console.warn('[BG TabPDF] capture failed:', e && e.message);
+  }
+}
+
+// Two detectors, because neither alone is enough. The response header is the
+// truth — it catches `/article/download?id=48812`, which no pattern would — but
+// webRequest is not guaranteed to be observing in every channel, so the url
+// pattern stays as the fallback that needs no permission at all.
+const _pdfByHeader = new Map();      // tabId -> url last seen served as a PDF
+
+if (chrome.webRequest && chrome.webRequest.onHeadersReceived) {
+  try {
+    chrome.webRequest.onHeadersReceived.addListener(details => {
+      if (details.type !== 'main_frame' || details.tabId < 0) return;
+      const ct = (details.responseHeaders || [])
+        .find(h => (h.name || '').toLowerCase() === 'content-type');
+      if (ct && /application\/(pdf|x-pdf|octet-stream)/i.test(ct.value || '')) {
+        _pdfByHeader.set(details.tabId, details.url);
+      }
+    }, { urls: ['http://*/*', 'https://*/*'], types: ['main_frame'] }, ['responseHeaders']);
+  } catch (e) {
+    console.log('[BG TabPDF] header detection unavailable:', e && e.message);
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete' || !tab || !tab.url) return;
+  const byHeader = _pdfByHeader.get(tabId);
+  const isPdf = (byHeader && byHeader === tab.url) || _TAB_PDF_RX.test(tab.url);
+  if (!isPdf) return;
+  _pdfByHeader.delete(tabId);
+  void _captureOpenedPdf(tabId, tab.url);
+});
+
+chrome.tabs.onRemoved.addListener(tabId => { _pdfByHeader.delete(tabId); });
+
+console.log('[BG] Tab-PDF capture active — a journal PDF opened in a tab is offered like a download');
